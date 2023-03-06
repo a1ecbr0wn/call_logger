@@ -21,8 +21,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// The format to use when outputting the timestamp of the log.  Timestamps are only part
 /// of the log output if the `timestamps` feature is enabled for `call_logger`/
 #[cfg(feature = "timestamps")]
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum TimestampFormat {
     UtcEpochMs,
     UtcEpochUs,
@@ -45,7 +44,7 @@ pub struct CallLogger {
 
 impl CallLogger {
     /// Creates a new `CallLogger`, use this along with the builder methods and then call `init` to
-    /// set up the logger.  The default timestamp format is utc epoch (if the `timestamps` feature 
+    /// set up the logger.  The default timestamp format is utc epoch (if the `timestamps` feature
     /// is enabled), and the default call app that is called is `echo`.
     pub fn new() -> CallLogger {
         CallLogger {
@@ -203,48 +202,41 @@ mod test {
 
     #[test]
     fn test_level() {
-        let logger = CallLogger::default()
-            .with_level(LevelFilter::Info);
+        let logger = CallLogger::default().with_level(LevelFilter::Info);
         assert_eq!(logger.default_level, LevelFilter::Info);
     }
 
     #[test]
     fn test_call_target() {
-        let logger = CallLogger::default()
-            .with_call_target("wc".to_string());
+        let logger = CallLogger::default().with_call_target("wc".to_string());
         assert_eq!(logger.call_target, "wc".to_string());
     }
 
     #[test]
     #[cfg(feature = "timestamps")]
     fn test_epoch_ms_timestamp() {
-        let logger = CallLogger::default()
-            .with_epoch_ms_timestamp();
+        let logger = CallLogger::default().with_epoch_ms_timestamp();
         assert_eq!(logger.timestamp, TimestampFormat::UtcEpochMs);
     }
 
     #[test]
     #[cfg(feature = "timestamps")]
     fn test_epoch_us_timestamp() {
-        let logger = CallLogger::default()
-            .with_epoch_us_timestamp();
+        let logger = CallLogger::default().with_epoch_us_timestamp();
         assert_eq!(logger.timestamp, TimestampFormat::UtcEpochUs);
     }
 
     #[test]
     #[cfg(feature = "timestamps")]
     fn test_utc_timestamp() {
-        let logger = CallLogger::default()
-            .with_utc_timestamp();
+        let logger = CallLogger::default().with_utc_timestamp();
         assert_eq!(logger.timestamp, TimestampFormat::Utc);
     }
 
     #[test]
     #[cfg(feature = "timestamps")]
     fn test_local_timestamp() {
-        let logger = CallLogger::default()
-            .with_local_timestamp();
+        let logger = CallLogger::default().with_local_timestamp();
         assert_eq!(logger.timestamp, TimestampFormat::Local);
     }
-
 }
