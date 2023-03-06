@@ -1,0 +1,17 @@
+[package]
+name = "call_logger"
+version = "0.0.1"
+edition = "2021"
+authors = ["Alec Brown <alec@noser.net>"]
+description = "A logger that calls another application for every logged item"
+rust-version = "1.58"
+license = "Apache-2.0"
+repository = "https://github.com/a1ecbr0wn/call_logger"
+homepage = "https://github.com/a1ecbr0wn/call_logger"
+documentation = "https://docs.rs/call_logger"
+readme = "README.md"
+categories = ["development-tools::debugging"]
+keywords = ["logging"]
+
+[dependencies]
+log = { version = "0.4", features = ["std"] }
