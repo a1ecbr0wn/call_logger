@@ -1,0 +1,62 @@
+---
+name: CI Build
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'
+
+env:
+  RUSTFLAGS: '--deny warnings'
+
+jobs:
+  format:
+    name: "Rust Format Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v2
+
+      - name: "Rust Toolchain setup"
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            components: rustfmt
+            override: true
+
+      - name: "Format Check"
+        uses: mbrobbel/rustfmt-check@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: "CI Build"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable]
+        TARGET:
+          - x86_64-unknown-linux-gnu
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v2
+      
+      - name: "Toolchain setup"
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.TARGET }}
+          override: true
+
+      - name: "Build"
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
