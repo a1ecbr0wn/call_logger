@@ -18,13 +18,16 @@ use chrono::{DateTime, Local, Utc};
 #[cfg(feature = "timestamps")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// The format to use when outputting the timestamp of the log.  Timestamps are only part
+/// of the log output if the `timestamps` feature is enabled for `call_logger`/
 #[cfg(feature = "timestamps")]
 #[derive(PartialEq)]
+#[derive(Debug)]
 pub enum TimestampFormat {
     UtcEpochMs,
     UtcEpochUs,
-    UtcTime,
-    LocalTime,
+    Utc,
+    Local,
 }
 
 /// Implements [`Log`] and some simple builder methods to configure.
@@ -35,11 +38,15 @@ pub struct CallLogger {
     /// The target call to make every time a logging event occurs
     call_target: String,
 
+    /// The format to be used to output the timestamp
     #[cfg(feature = "timestamps")]
     timestamp: TimestampFormat,
 }
 
 impl CallLogger {
+    /// Creates a new `CallLogger`, use this along with the builder methods and then call `init` to
+    /// set up the logger.  The default timestamp format is utc epoch (if the `timestamps` feature 
+    /// is enabled), and the default call app that is called is `echo`.
     pub fn new() -> CallLogger {
         CallLogger {
             default_level: LevelFilter::Trace,
@@ -48,29 +55,57 @@ impl CallLogger {
             call_target: "echo".to_string(),
 
             #[cfg(feature = "timestamps")]
-            timestamp: TimestampFormat::UtcTime,
+            timestamp: TimestampFormat::Utc,
         }
     }
 
+    /// The maximum log level that would be logged
     #[must_use = "You must call init() before logging"]
     pub fn with_level(mut self, level: LevelFilter) -> CallLogger {
         self.default_level = level;
         self
     }
 
+    /// Sets the command line app or script that is called and passed the log details
     #[must_use = "You must call init() before logging"]
     pub fn with_call_target(mut self, call_target: String) -> CallLogger {
         self.call_target = call_target;
         self
     }
 
+    /// Sets the timestamp to the number of milliseconds since the epoch
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
-    pub fn with_timestamp(mut self, timestamp: TimestampFormat) -> CallLogger {
-        self.timestamp = timestamp;
+    pub fn with_epoch_ms_timestamp(mut self) -> CallLogger {
+        self.timestamp = TimestampFormat::UtcEpochMs;
         self
     }
 
+    /// Sets the timestamp to the number of microseconds since the epoch
+    #[must_use = "You must call init() before logging"]
+    #[cfg(feature = "timestamps")]
+    pub fn with_epoch_us_timestamp(mut self) -> CallLogger {
+        self.timestamp = TimestampFormat::UtcEpochUs;
+        self
+    }
+
+    /// Sets the timestamp to a the UTC timezone
+    #[must_use = "You must call init() before logging"]
+    #[cfg(feature = "timestamps")]
+    pub fn with_utc_timestamp(mut self) -> CallLogger {
+        self.timestamp = TimestampFormat::Utc;
+        self
+    }
+
+    /// Sets the timestamp to a the local timezone
+    #[must_use = "You must call init() before logging"]
+    #[cfg(feature = "timestamps")]
+    pub fn with_local_timestamp(mut self) -> CallLogger {
+        self.timestamp = TimestampFormat::Local;
+        self
+    }
+
+    /// This needs to be called after the builder has set up the logger
     pub fn init(self) -> Result<(), SetLoggerError> {
         log::set_max_level(self.default_level);
         log::set_boxed_logger(Box::new(self))?;
@@ -79,7 +114,6 @@ impl CallLogger {
 }
 
 impl Default for CallLogger {
-    /// See [this](struct.SimpleLogger.html#method.new)
     fn default() -> Self {
         CallLogger::new()
     }
@@ -108,11 +142,11 @@ impl Log for CallLogger {
                         .expect("Leap second or time went backwards")
                         .as_micros()
                 ),
-                TimestampFormat::UtcTime => format!(
+                TimestampFormat::Utc => format!(
                     "\"ts\": \"{}\", ",
                     Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()
                 ),
-                TimestampFormat::LocalTime => format!(
+                TimestampFormat::Local => format!(
                     "\"ts\": \"{}\", ",
                     Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339()
                 ),
@@ -168,14 +202,49 @@ mod test {
     }
 
     #[test]
-    fn test_log_custom() {
+    fn test_level() {
         let logger = CallLogger::default()
-            .with_level(LevelFilter::Info)
-            .with_call_target("wc".to_string())
-            .with_timestamp(TimestampFormat::UtcEpochUs);
+            .with_level(LevelFilter::Info);
         assert_eq!(logger.default_level, LevelFilter::Info);
-        assert_eq!(logger.call_target, "wc".to_string());
-        let _ = logger.with_call_target("echo".to_string()).init();
-        log::error!("test_log_custom");
     }
+
+    #[test]
+    fn test_call_target() {
+        let logger = CallLogger::default()
+            .with_call_target("wc".to_string());
+        assert_eq!(logger.call_target, "wc".to_string());
+    }
+
+    #[test]
+    #[cfg(feature = "timestamps")]
+    fn test_epoch_ms_timestamp() {
+        let logger = CallLogger::default()
+            .with_epoch_ms_timestamp();
+        assert_eq!(logger.timestamp, TimestampFormat::UtcEpochMs);
+    }
+
+    #[test]
+    #[cfg(feature = "timestamps")]
+    fn test_epoch_us_timestamp() {
+        let logger = CallLogger::default()
+            .with_epoch_us_timestamp();
+        assert_eq!(logger.timestamp, TimestampFormat::UtcEpochUs);
+    }
+
+    #[test]
+    #[cfg(feature = "timestamps")]
+    fn test_utc_timestamp() {
+        let logger = CallLogger::default()
+            .with_utc_timestamp();
+        assert_eq!(logger.timestamp, TimestampFormat::Utc);
+    }
+
+    #[test]
+    #[cfg(feature = "timestamps")]
+    fn test_local_timestamp() {
+        let logger = CallLogger::default()
+            .with_local_timestamp();
+        assert_eq!(logger.timestamp, TimestampFormat::Local);
+    }
+
 }
