@@ -1,10 +1,10 @@
 //! A logger that calls another application on each log event
 //!
-//! The target application that this library calls, is passed a JSON formatted parameter that displays the 
+//! The target application that this library calls, is passed a JSON formatted parameter that displays the
 //! information about the log call to the target application.
-//! 
+//!
 //! Why would you do this?
-//! 
+//!
 //! - There are quick a dirty things that you might want to do with log output
 //! - You want your log output to be handled differently in different environments which you can configure
 //! - You want to use call a webhook/webservice to notify another service (e.g. Pushover.net, discord, AWS Cloudwatch)
@@ -14,7 +14,7 @@ use std::process::Command;
 use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
 
 #[cfg(feature = "timestamps")]
-use chrono::{DateTime, Utc, Local};
+use chrono::{DateTime, Local, Utc};
 #[cfg(feature = "timestamps")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,7 +24,7 @@ pub enum TimestampFormat {
     UtcEpochMs,
     UtcEpochUs,
     UtcTime,
-    LocalTime
+    LocalTime,
 }
 
 /// Implements [`Log`] and some simple builder methods to configure.
@@ -36,7 +36,7 @@ pub struct CallLogger {
     call_target: String,
 
     #[cfg(feature = "timestamps")]
-    timestamp: TimestampFormat
+    timestamp: TimestampFormat,
 }
 
 impl CallLogger {
@@ -48,7 +48,7 @@ impl CallLogger {
             call_target: "echo".to_string(),
 
             #[cfg(feature = "timestamps")]
-            timestamp: TimestampFormat::UtcTime
+            timestamp: TimestampFormat::UtcTime,
         }
     }
 
@@ -94,42 +94,64 @@ impl Log for CallLogger {
         let timestamp = {
             #[cfg(feature = "timestamps")]
             match &self.timestamp {
-                TimestampFormat::UtcEpochMs => format!("\"ts\": \"{}\", ", SystemTime::now().duration_since(UNIX_EPOCH).expect("Leap second or time went backwards").as_millis()),
-                TimestampFormat::UtcEpochUs => format!("\"ts\": \"{}\", ", SystemTime::now().duration_since(UNIX_EPOCH).expect("Leap second or time went backwards").as_micros()),
-                TimestampFormat::UtcTime => format!("\"ts\": \"{}\", ", Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()),
-                TimestampFormat::LocalTime => format!("\"ts\": \"{}\", ", Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339())
+                TimestampFormat::UtcEpochMs => format!(
+                    "\"ts\": \"{}\", ",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Leap second or time went backwards")
+                        .as_millis()
+                ),
+                TimestampFormat::UtcEpochUs => format!(
+                    "\"ts\": \"{}\", ",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Leap second or time went backwards")
+                        .as_micros()
+                ),
+                TimestampFormat::UtcTime => format!(
+                    "\"ts\": \"{}\", ",
+                    Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()
+                ),
+                TimestampFormat::LocalTime => format!(
+                    "\"ts\": \"{}\", ",
+                    Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339()
+                ),
             }
-            
+
             #[cfg(not(feature = "timestamps"))]
             ""
         };
         let level = format!("\"level\": \"{}\", ", record.level());
         let file = match record.file() {
             Some(file) => format!("\"file\": \"{}\", ", file),
-            None => "".to_string()
+            None => "".to_string(),
         };
         let line = match record.line() {
             Some(line) => format!("\"line\": \"{}\", ", line),
-            None => "".to_string()
+            None => "".to_string(),
         };
         let module_path = match record.module_path() {
             Some(module_path) => format!("\"module_path\": \"{}\", ", module_path),
-            None => "".to_string()
+            None => "".to_string(),
         };
         let msg = format!("\"msg\": \"{}\"", record.args());
         let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
         let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
         match call_rtn {
             Ok(_child) => {
-                println!("{} called successfully with pid {}", self.call_target, _child.id());
-            },
+                println!(
+                    "{} called successfully with pid {}",
+                    self.call_target,
+                    _child.id()
+                );
+            }
             Err(x) => {
                 println!("call to {} failed {x}", self.call_target);
-            },
+            }
         }
     }
 
-    fn flush(&self) { }
+    fn flush(&self) {}
 }
 
 #[cfg(test)]
