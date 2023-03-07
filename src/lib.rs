@@ -3,11 +3,17 @@
 //! The target application that this library calls, is passed a JSON formatted parameter that displays the
 //! information about the log call to the target application.
 //!
-//! Why would you do this?
+//! # Why would you do this?
 //!
 //! - There are quick a dirty things that you might want to do with log output
 //! - You want your log output to be handled differently in different environments which you can configure
 //! - You want to use call a webhook/webservice to notify another service (e.g. Pushover.net, discord, AWS Cloudwatch)
+//!
+//! # Features
+//!
+//! - `timestamps`
+//!   - add a timestamp to the output
+//!   - the timestamp can be set to one of a number of formats specified by a number of [`CallLogger`] builder functions
 
 use std::process::Command;
 
@@ -22,7 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// of the log output if the `timestamps` feature is enabled for `call_logger`/
 #[cfg(feature = "timestamps")]
 #[derive(PartialEq, Debug)]
-pub enum TimestampFormat {
+enum TimestampFormat {
     UtcEpochMs,
     UtcEpochUs,
     Utc,

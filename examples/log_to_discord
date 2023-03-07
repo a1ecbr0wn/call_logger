@@ -2,12 +2,13 @@
 
 import json
 import sys
+import os
 import requests
 
 USER = "log-discord"
 
 def push_notification(user, message):
-    url = "https://discord.com/api/webhooks/1082449140585336873/UifCgDr204Dllng_9nmvGatN95jr6hbQmZhSBYsXTZ3K3IBwCOsRlhPjZtIjGAK4TS0W"
+    url = os.environ['CALL_LOGGER_DISCORD']
     data = { "user": user, "content": message, }
     resp = requests.post(url=url, json=data, )
     try:

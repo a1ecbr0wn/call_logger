@@ -27,6 +27,10 @@ fn main() {
 }
 ```
 
+## Features
+
+- `timestamps` - add a timestamp to the output
+
 ## Contribute
 
 This is just an early attempt at a general purpose logger that calls out to another process.  If you have any ideas for missing features, please raise an [issue](https://github.com/a1ecbr0wn/call_logger/issues) or a PR.
