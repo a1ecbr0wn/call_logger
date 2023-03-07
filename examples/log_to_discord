@@ -1,0 +1,24 @@
+#!/usr/bin/python3
+
+import json
+import sys
+import requests
+
+USER = "log-discord"
+
+def push_notification(user, message):
+    url = "https://discord.com/api/webhooks/1082449140585336873/UifCgDr204Dllng_9nmvGatN95jr6hbQmZhSBYsXTZ3K3IBwCOsRlhPjZtIjGAK4TS0W"
+    data = { "user": user, "content": message, }
+    resp = requests.post(url=url, json=data, )
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Script requires a parameter")
+    else:
+        doc=json.loads(sys.argv[1])
+        msg="{} [{}] {} - {}".format(doc["ts"], doc["level"], doc["module_path"], doc["msg"])
+        push_notification(USER, msg)

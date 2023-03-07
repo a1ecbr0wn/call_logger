@@ -171,13 +171,7 @@ impl Log for CallLogger {
         let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
         let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
         match call_rtn {
-            Ok(_child) => {
-                println!(
-                    "{} called successfully with pid {}",
-                    self.call_target,
-                    _child.id()
-                );
-            }
+            Ok(_child) => {}
             Err(x) => {
                 println!("call to {} failed {x}", self.call_target);
             }
