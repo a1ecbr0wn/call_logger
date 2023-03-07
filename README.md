@@ -5,7 +5,7 @@
 
 # call_logger
 
-[![Crates.io](https://img.shields.io/crates/l/call_logger)](https://github.com/a1ecbr0wn/call_logger/blob/main/LICENSE) [![Crates.io](https://img.shields.io/crates/v/call_logger)](https://crates.io/crates/call_logger) [![Build Status](https://github.com/a1ecbr0wn/call_logger/workflows/CI%20Build/badge.svg)](https://github.com/a1ecbr0wn/call_logger/actions/workflows/build.yml) [![docs.rs](https://img.shields.io/docsrs/call_logger)](https://docs.rs/call_logger) [![dependency status](https://deps.rs/repo/github/a1ecbr0wn/call_logger/status.svg)](https://deps.rs/repo/github/a1ecbr0wn/call_logger)#
+[![Crates.io](https://img.shields.io/crates/l/call_logger)](https://github.com/a1ecbr0wn/call_logger/blob/main/LICENSE) [![Crates.io](https://img.shields.io/crates/v/call_logger)](https://crates.io/crates/call_logger) [![Build Status](https://github.com/a1ecbr0wn/call_logger/workflows/CI%20Build/badge.svg)](https://github.com/a1ecbr0wn/call_logger/actions/workflows/build.yml) [![docs.rs](https://img.shields.io/docsrs/call_logger)](https://docs.rs/call_logger) [![dependency status](https://deps.rs/repo/github/a1ecbr0wn/call_logger/status.svg)](https://deps.rs/repo/github/a1ecbr0wn/call_logger)
 
 A logger that calls another application for every logged item, passing a json formatted string that contains the details of the log event.
 
