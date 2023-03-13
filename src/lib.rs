@@ -173,7 +173,10 @@ impl Log for CallLogger {
             Some(module_path) => format!("\"module_path\": \"{}\", ", module_path),
             None => "".to_string(),
         };
-        let msg = format!("\"msg\": \"{}\"", record.args());
+        let msg = format!(
+            "\"msg\": \"{}\"",
+            record.args().to_string().replace('\"', "\\\"")
+        );
         let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
         let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
         match call_rtn {
@@ -197,7 +200,17 @@ mod test {
         assert_eq!(logger.default_level, LevelFilter::Trace);
         assert_eq!(logger.call_target, "echo".to_string());
         let _ = logger.init();
-        log::info!("test_log_default");
+        log::info!("test message");
+    }
+
+    #[test]
+    fn test_log_quoted_string() {
+        let logger = CallLogger::default();
+        assert_eq!(logger.default_level, LevelFilter::Trace);
+        assert_eq!(logger.call_target, "echo".to_string());
+        let _ = logger.init();
+        let msg = r#"{ "message": "test message" }"#;
+        log::info!("{msg}");
     }
 
     #[test]
