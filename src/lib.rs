@@ -175,7 +175,11 @@ impl Log for CallLogger {
         };
         let msg = format!(
             "\"msg\": \"{}\"",
-            record.args().to_string().replace('\"', "\\\"")
+            record
+                .args()
+                .to_string()
+                .replace('\\', "\\\\")
+                .replace('\"', "\\\"")
         );
         let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
         let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
@@ -209,7 +213,7 @@ mod test {
         assert_eq!(logger.default_level, LevelFilter::Trace);
         assert_eq!(logger.call_target, "echo".to_string());
         let _ = logger.init();
-        let msg = r#"{ "message": "test message" }"#;
+        let msg = r#"{ \"message\": \"test message\" }"#;
         log::info!("{msg}");
     }
 
