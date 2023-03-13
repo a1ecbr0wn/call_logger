@@ -38,7 +38,7 @@ enum TimestampFormat {
 /// Implements [`Log`] and some simple builder methods to configure.
 pub struct CallLogger {
     /// The default logging level
-    default_level: LevelFilter,
+    level: LevelFilter,
 
     /// The target call to make every time a logging event occurs
     call_target: String,
@@ -54,7 +54,7 @@ impl CallLogger {
     /// is enabled), and the default call app that is called is `echo`.
     pub fn new() -> CallLogger {
         CallLogger {
-            default_level: LevelFilter::Trace,
+            level: LevelFilter::Trace,
 
             // default to calling echo which will output the log event to console
             call_target: "echo".to_string(),
@@ -67,7 +67,7 @@ impl CallLogger {
     /// The maximum log level that would be logged
     #[must_use = "You must call init() before logging"]
     pub fn with_level(mut self, level: LevelFilter) -> CallLogger {
-        self.default_level = level;
+        self.level = level;
         self
     }
 
@@ -112,7 +112,7 @@ impl CallLogger {
 
     /// This needs to be called after the builder has set up the logger
     pub fn init(self) -> Result<(), SetLoggerError> {
-        log::set_max_level(self.default_level);
+        log::set_max_level(self.level);
         log::set_boxed_logger(Box::new(self))?;
         Ok(())
     }
@@ -125,68 +125,70 @@ impl Default for CallLogger {
 }
 
 impl Log for CallLogger {
-    fn enabled(&self, _metadata: &Metadata) -> bool {
-        true
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= self.level
     }
 
     fn log(&self, record: &Record) {
-        let timestamp = {
-            #[cfg(feature = "timestamps")]
-            match &self.timestamp {
-                TimestampFormat::UtcEpochMs => format!(
-                    "\"ts\": \"{}\", ",
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Leap second or time went backwards")
-                        .as_millis()
-                ),
-                TimestampFormat::UtcEpochUs => format!(
-                    "\"ts\": \"{}\", ",
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Leap second or time went backwards")
-                        .as_micros()
-                ),
-                TimestampFormat::Utc => format!(
-                    "\"ts\": \"{}\", ",
-                    Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()
-                ),
-                TimestampFormat::Local => format!(
-                    "\"ts\": \"{}\", ",
-                    Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339()
-                ),
-            }
+        if self.enabled(record.metadata()) {
+            let timestamp = {
+                #[cfg(feature = "timestamps")]
+                match &self.timestamp {
+                    TimestampFormat::UtcEpochMs => format!(
+                        "\"ts\": \"{}\", ",
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Leap second or time went backwards")
+                            .as_millis()
+                    ),
+                    TimestampFormat::UtcEpochUs => format!(
+                        "\"ts\": \"{}\", ",
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Leap second or time went backwards")
+                            .as_micros()
+                    ),
+                    TimestampFormat::Utc => format!(
+                        "\"ts\": \"{}\", ",
+                        Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()
+                    ),
+                    TimestampFormat::Local => format!(
+                        "\"ts\": \"{}\", ",
+                        Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339()
+                    ),
+                }
 
-            #[cfg(not(feature = "timestamps"))]
-            ""
-        };
-        let level = format!("\"level\": \"{}\", ", record.level());
-        let file = match record.file() {
-            Some(file) => format!("\"file\": \"{}\", ", file),
-            None => "".to_string(),
-        };
-        let line = match record.line() {
-            Some(line) => format!("\"line\": \"{}\", ", line),
-            None => "".to_string(),
-        };
-        let module_path = match record.module_path() {
-            Some(module_path) => format!("\"module_path\": \"{}\", ", module_path),
-            None => "".to_string(),
-        };
-        let msg = format!(
-            "\"msg\": \"{}\"",
-            record
-                .args()
-                .to_string()
-                .replace('\\', "\\\\")
-                .replace('\"', "\\\"")
-        );
-        let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
-        let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
-        match call_rtn {
-            Ok(_child) => {}
-            Err(x) => {
-                println!("call to {} failed {x}", self.call_target);
+                #[cfg(not(feature = "timestamps"))]
+                ""
+            };
+            let level = format!("\"level\": \"{}\", ", record.level());
+            let file = match record.file() {
+                Some(file) => format!("\"file\": \"{}\", ", file),
+                None => "".to_string(),
+            };
+            let line = match record.line() {
+                Some(line) => format!("\"line\": \"{}\", ", line),
+                None => "".to_string(),
+            };
+            let module_path = match record.module_path() {
+                Some(module_path) => format!("\"module_path\": \"{}\", ", module_path),
+                None => "".to_string(),
+            };
+            let msg = format!(
+                "\"msg\": \"{}\"",
+                record
+                    .args()
+                    .to_string()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\"")
+            );
+            let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
+            let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
+            match call_rtn {
+                Ok(_child) => {}
+                Err(x) => {
+                    println!("call to {} failed {x}", self.call_target);
+                }
             }
         }
     }
@@ -201,7 +203,7 @@ mod test {
     #[test]
     fn test_log_default() {
         let logger = CallLogger::default();
-        assert_eq!(logger.default_level, LevelFilter::Trace);
+        assert_eq!(logger.level, LevelFilter::Trace);
         assert_eq!(logger.call_target, "echo".to_string());
         let _ = logger.init();
         log::info!("test message");
@@ -210,7 +212,7 @@ mod test {
     #[test]
     fn test_log_quoted_string() {
         let logger = CallLogger::default();
-        assert_eq!(logger.default_level, LevelFilter::Trace);
+        assert_eq!(logger.level, LevelFilter::Trace);
         assert_eq!(logger.call_target, "echo".to_string());
         let _ = logger.init();
         let msg = r#"{ \"message\": \"test message\" }"#;
@@ -218,9 +220,18 @@ mod test {
     }
 
     #[test]
+    fn test_log_level_filter() {
+        let logger = CallLogger::new().with_level(LevelFilter::Error);
+        assert_eq!(logger.level, LevelFilter::Error);
+        assert_eq!(logger.call_target, "echo".to_string());
+        let _ = logger.init();
+        log::info!("filtered message");
+    }
+
+    #[test]
     fn test_level() {
         let logger = CallLogger::default().with_level(LevelFilter::Info);
-        assert_eq!(logger.default_level, LevelFilter::Info);
+        assert_eq!(logger.level, LevelFilter::Info);
     }
 
     #[test]
