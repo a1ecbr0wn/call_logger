@@ -9,8 +9,8 @@ on:
 
 jobs:
   tag-release:
-    name: "Tag Release Build"
-    runs-on: "ubuntu-latest"
+    name: Tag Release Build
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         rust: [stable]
@@ -18,26 +18,19 @@ jobs:
           - x86_64-unknown-linux-gnu
 
     steps:
-      - name: "Checkout"
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: "Toolchain setup"
-        uses: actions-rs/toolchain@v1
+      - name: Toolchain setup
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.TARGET }}
-          override: true
 
-      - name: "Build"
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+      - name: Build
+        run: cargo build --release
 
-      - name: "Publish to crates.io"
+      - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: "${{ secrets.CRATES_TOKEN }}"
-        uses: actions-rs/cargo@v1
-        with:
-          command: publish
+        run: cargo publish
