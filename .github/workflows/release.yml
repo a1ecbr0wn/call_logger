@@ -1,5 +1,5 @@
 ---
-name: Tag Release Build
+name: Release Binaries on Tag
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   tag-release:
-    name: Tag Release Build
+    name: Build tag as a release
     runs-on: ubuntu-latest
     strategy:
       matrix:
