@@ -15,8 +15,9 @@
 //!   - add a timestamp to the output
 //!   - the timestamp can be set to one of a number of formats specified by a number of [`CallLogger`] builder functions
 
-use std::process::Command;
+use std::{collections::HashMap, process::Command};
 
+use log::kv::{Error, Key, Value, VisitSource};
 use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
 
 #[cfg(feature = "timestamps")]
@@ -65,13 +66,16 @@ impl CallLogger {
     }
 
     /// The maximum log level that would be logged
+    #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn with_level(mut self, level: LevelFilter) -> CallLogger {
         self.level = level;
+        log::set_max_level(self.level);
         self
     }
 
     /// Sets the command line app or script that is called and passed the log details
+    #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn with_call_target(mut self, call_target: String) -> CallLogger {
         self.call_target = call_target;
@@ -79,6 +83,7 @@ impl CallLogger {
     }
 
     /// Sets the timestamp to the number of milliseconds since the epoch
+    #[inline]
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
     pub fn with_epoch_ms_timestamp(mut self) -> CallLogger {
@@ -87,6 +92,7 @@ impl CallLogger {
     }
 
     /// Sets the timestamp to the number of microseconds since the epoch
+    #[inline]
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
     pub fn with_epoch_us_timestamp(mut self) -> CallLogger {
@@ -95,6 +101,7 @@ impl CallLogger {
     }
 
     /// Sets the timestamp to a the UTC timezone
+    #[inline]
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
     pub fn with_utc_timestamp(mut self) -> CallLogger {
@@ -103,6 +110,7 @@ impl CallLogger {
     }
 
     /// Sets the timestamp to a the local timezone
+    #[inline]
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
     pub fn with_local_timestamp(mut self) -> CallLogger {
@@ -112,7 +120,6 @@ impl CallLogger {
 
     /// This needs to be called after the builder has set up the logger
     pub fn init(self) -> Result<(), SetLoggerError> {
-        log::set_max_level(self.level);
         log::set_boxed_logger(Box::new(self))?;
         Ok(())
     }
@@ -163,16 +170,28 @@ impl Log for CallLogger {
             };
             let level = format!("\"level\": \"{}\", ", record.level());
             let file = match record.file() {
-                Some(file) => format!("\"file\": \"{}\", ", file),
+                Some(file) => format!("\"file\": \"{file}\", "),
                 None => "".to_string(),
             };
             let line = match record.line() {
-                Some(line) => format!("\"line\": \"{}\", ", line),
+                Some(line) => format!("\"line\": \"{line}\", "),
                 None => "".to_string(),
             };
             let module_path = match record.module_path() {
-                Some(module_path) => format!("\"module_path\": \"{}\", ", module_path),
+                Some(module_path) => format!("\"module_path\": \"{module_path}\", "),
                 None => "".to_string(),
+            };
+            let mut visitor = LogVisitor {
+                map: HashMap::new(),
+            };
+            let kv_str = if let Ok(()) = record.key_values().visit(&mut visitor) {
+                let mut msg = String::new();
+                for (key, value) in visitor.map {
+                    msg.push_str(&format!("\"{key}\": \"{value}\", "));
+                }
+                msg
+            } else {
+                "".to_string()
             };
             let msg = format!(
                 "\"msg\": \"{}\"",
@@ -182,10 +201,18 @@ impl Log for CallLogger {
                     .replace('\\', "\\\\")
                     .replace('\"', "\\\"")
             );
-            let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{msg} }}");
-            let call_rtn = Command::new(self.call_target.clone()).args([json]).spawn();
+            let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{kv_str}{msg} }}");
+            let mut args = self.call_target.split(' ');
+            let call_target = args.next().unwrap();
+            let call_rtn = if args.clone().count() > 0 {
+                Command::new(call_target).args(args).args([json]).spawn()
+            } else {
+                Command::new(call_target).args([json]).spawn()
+            };
             match call_rtn {
-                Ok(_child) => {}
+                Ok(_child) => {
+                    println!("call to {} succeeded", self.call_target);
+                }
                 Err(x) => {
                     println!("call to {} failed {x}", self.call_target);
                 }
@@ -193,12 +220,63 @@ impl Log for CallLogger {
         }
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        log::logger().flush()
+    }
+}
+
+struct LogVisitor {
+    map: HashMap<String, String>,
+}
+
+impl<'kvs> VisitSource<'kvs> for LogVisitor {
+    fn visit_pair(&mut self, key: Key<'kvs>, value: Value<'kvs>) -> Result<(), Error> {
+        self.map.insert(key.to_string(), value.to_string());
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use log::{
+        kv::{Source, ToKey, ToValue},
+        Level,
+    };
+    use std::{
+        fs::{read_to_string, remove_file},
+        thread, time,
+    };
+
+    #[test]
+    fn test_log() {
+        let logger = CallLogger::new()
+            .with_level(LevelFilter::Error)
+            .with_call_target("scripts/to_file.sh test_log.log".to_string());
+        logger.log(
+            &Record::builder()
+                .args(format_args!("test message"))
+                .file(Some("src/lib.rs"))
+                .module_path(Some("call_logger::test"))
+                .level(Level::Error)
+                .build(),
+        );
+        for _ in 0..20 {
+            if let Ok(test) = read_to_string("test_log.log") {
+                println!("test_log.log: {test}");
+                assert!(test.contains("\"level\": \"ERROR\""));
+                assert!(test.contains("\"file\": \"src/lib.rs\""));
+                assert!(test.contains("\"module_path\": \"call_logger::test\""));
+                assert!(test.contains("\"msg\": \"test message\""));
+                remove_file("test_log.log").unwrap();
+                thread::sleep(time::Duration::from_millis(10));
+                return;
+            } else {
+                thread::sleep(time::Duration::from_millis(100));
+            }
+        }
+        panic!("Failed to detect the log message");
+    }
 
     #[test]
     fn test_log_default() {
@@ -214,9 +292,8 @@ mod test {
         let logger = CallLogger::default();
         assert_eq!(logger.level, LevelFilter::Trace);
         assert_eq!(logger.call_target, "echo".to_string());
-        let _ = logger.init();
-        let msg = r#"{ \"message\": \"test message\" }"#;
-        log::info!("{msg}");
+        let msg = r#"{ "message": "test message" }"#;
+        logger.log(&Record::builder().args(format_args!("{msg}")).build());
     }
 
     #[test]
@@ -224,8 +301,11 @@ mod test {
         let logger = CallLogger::new().with_level(LevelFilter::Error);
         assert_eq!(logger.level, LevelFilter::Error);
         assert_eq!(logger.call_target, "echo".to_string());
-        let _ = logger.init();
-        log::info!("filtered message");
+        logger.log(
+            &Record::builder()
+                .args(format_args!("filtered message"))
+                .build(),
+        );
     }
 
     #[test]
@@ -266,5 +346,48 @@ mod test {
     fn test_local_timestamp() {
         let logger = CallLogger::default().with_local_timestamp();
         assert_eq!(logger.timestamp, TimestampFormat::Local);
+    }
+
+    #[test]
+    fn test_kv_log() {
+        let logger = CallLogger::default()
+            .with_call_target("scripts/to_file.sh test_kv_log.log".to_string());
+        let source = TestSource {
+            key: "test".to_string(),
+            value: "value".to_string(),
+        };
+        logger.log(
+            &Record::builder()
+                .args(format_args!("test message"))
+                .key_values(&source)
+                .file(Some("src/lib.rs"))
+                .module_path(Some("call_logger::test"))
+                .level(Level::Info)
+                .build(),
+        );
+        thread::sleep(time::Duration::from_millis(10));
+        if let Ok(test) = read_to_string("test_kv_log.log") {
+            println!("test_kv_log.log: {test}");
+            assert!(test.contains("\"test\": \"value\""));
+            assert!(test.contains("\"level\": \"INFO\""));
+            assert!(test.contains("\"file\": \"src/lib.rs\""));
+            assert!(test.contains("\"module_path\": \"call_logger::test\""));
+            assert!(test.contains("\"msg\": \"test message\""));
+            remove_file("test_kv_log.log").unwrap();
+            thread::sleep(time::Duration::from_millis(10));
+        } else {
+            panic!();
+        }
+    }
+
+    struct TestSource {
+        key: String,
+        value: String,
+    }
+
+    impl Source for TestSource {
+        fn visit<'kvs>(&'kvs self, visitor: &mut dyn VisitSource<'kvs>) -> Result<(), Error> {
+            visitor.visit_pair(self.key.to_key(), self.value.to_value())
+        }
     }
 }
