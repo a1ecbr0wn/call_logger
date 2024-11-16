@@ -19,8 +19,8 @@ timestamps = ["chrono"]
 minimal = []
 
 [dependencies]
-log = { version = "^0.4.21", features = ["std", "kv"] }
-chrono = { version = "0.4.34", features = ["clock"], optional = true }
+log = { version = "^0.4.22", features = ["std", "kv"] }
+chrono = { version = "0.4.38", features = ["clock"], optional = true }
 
 [dev-dependencies]
 multi_log = "0.1.2"
