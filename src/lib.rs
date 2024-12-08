@@ -14,6 +14,12 @@
 //! - `timestamps`
 //!   - add a timestamp to the output
 //!   - the timestamp can be set to one of a number of formats specified by a number of [`CallLogger`] builder functions
+//!
+//! # Example
+//! ```
+//! let _ = call_logger::CallLogger::new().with_level(log::LevelFilter::Info).init();
+//! log::info!("msg");
+//! ```
 
 use std::{collections::HashMap, process::Command};
 
@@ -47,6 +53,9 @@ pub struct CallLogger {
     /// The format to be used to output the timestamp
     #[cfg(feature = "timestamps")]
     timestamp: TimestampFormat,
+
+    /// Echo everything to console just before making the call, to aid debugging.
+    echo: bool,
 }
 
 impl CallLogger {
@@ -62,6 +71,8 @@ impl CallLogger {
 
             #[cfg(feature = "timestamps")]
             timestamp: TimestampFormat::Utc,
+
+            echo: false,
         }
     }
 
@@ -115,6 +126,14 @@ impl CallLogger {
     #[cfg(feature = "timestamps")]
     pub fn with_local_timestamp(mut self) -> CallLogger {
         self.timestamp = TimestampFormat::Local;
+        self
+    }
+
+    /// Writes each call to console before making the call, use for debugging
+    #[inline]
+    #[must_use = "You must call init() before logging"]
+    pub fn echo(mut self) -> CallLogger {
+        self.echo = true;
         self
     }
 
@@ -202,17 +221,21 @@ impl Log for CallLogger {
                     .replace('\"', "\\\"")
             );
             let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{kv_str}{msg} }}");
+            if self.echo {
+                println!("Calling: `{} {json}`", self.call_target);
+            }
             let mut args = self.call_target.split(' ');
             let call_target = args.next().unwrap();
             let call_rtn = if args.clone().count() > 0 {
-                Command::new(call_target).args(args).args([json]).spawn()
+                Command::new(call_target)
+                    .args(args)
+                    .args([json.as_str()])
+                    .spawn()
             } else {
                 Command::new(call_target).args([json]).spawn()
             };
             match call_rtn {
-                Ok(_child) => {
-                    println!("call to {} succeeded", self.call_target);
-                }
+                Ok(_) => {}
                 Err(x) => {
                     println!("call to {} failed {x}", self.call_target);
                 }
@@ -365,7 +388,7 @@ mod test {
                 .level(Level::Info)
                 .build(),
         );
-        thread::sleep(time::Duration::from_millis(10));
+        thread::sleep(time::Duration::from_millis(20));
         if let Ok(test) = read_to_string("test_kv_log.log") {
             println!("test_kv_log.log: {test}");
             assert!(test.contains("\"test\": \"value\""));
@@ -376,7 +399,7 @@ mod test {
             remove_file("test_kv_log.log").unwrap();
             thread::sleep(time::Duration::from_millis(10));
         } else {
-            panic!();
+            panic!("test_kv_log.log cannot be read, consider increasing how long we wait for the test file to be written");
         }
     }
 
