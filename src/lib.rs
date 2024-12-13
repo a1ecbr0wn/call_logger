@@ -38,6 +38,7 @@
 //! # Example - Send all output to Discord via their API
 //! ```
 //! // Get the API endpoint from an environment variable, URL should start with `https://discord.com/api/webhooks/`
+//! #[cfg(feature = "timestamps")]
 //! if let Ok(endpoint) = std::env::var("DISCORD_API") {
 //!     let _ = call_logger::CallLogger::new()
 //!         .with_call_target(endpoint)
