@@ -31,6 +31,8 @@
 //!     .with_level(log::LevelFilter::Info)
 //!     .init();
 //! log::info!("msg");
+//! # use std::fs::remove_file;
+//! # remove_file("test.log").unwrap()
 //! ```
 //!
 //! # Example - Send all output to Discord via their API
@@ -187,6 +189,28 @@ impl CallLogger {
         self
     }
 
+    /// Sets the formatter of this logger. The closure should accept a formatted
+    /// value for a timestamp, a message and a log record, and return a `String`
+    /// representation of the message that has been formatted.
+    ///
+    /// [`fmt::Arguments`]: https://doc.rust-lang.org/std/fmt/struct.Arguments.html
+    ///
+    /// Example usage:
+    ///
+    /// ```
+    ///     let _ = call_logger::CallLogger::new()
+    ///         .format(|timestamp, message, record| {
+    ///             format!(
+    ///                 "{{ \"content\": \"{} [{}] {} - {}\" }}",
+    ///                 timestamp,
+    ///                 record.level(),
+    ///                 record.module_path().unwrap_or_default(),
+    ///                 message
+    ///             )
+    ///         })
+    ///         .init();
+    ///     log::info!("msg");
+    /// ```
     #[inline]
     #[cfg(feature = "timestamps")]
     pub fn format<F>(mut self, formatter: F) -> Self
@@ -197,6 +221,27 @@ impl CallLogger {
         self
     }
 
+    /// Sets the formatter of this logger. The closure should accept a message
+    /// and a log record, and return a `String` representation of the message
+    /// that has been formatted.
+    ///
+    /// [`fmt::Arguments`]: https://doc.rust-lang.org/std/fmt/struct.Arguments.html
+    ///
+    /// Example usage:
+    ///
+    /// ```
+    ///     let _ = call_logger::CallLogger::new()
+    ///         .format(|message, record| {
+    ///             format!(
+    ///                 "{{ \"content\": \"[{}] {} - {}\" }}",
+    ///                 record.level(),
+    ///                 record.module_path().unwrap_or_default(),
+    ///                 message
+    ///             )
+    ///         })
+    ///         .init();
+    ///     log::info!("msg");
+    /// ```
     #[inline]
     #[cfg(not(feature = "timestamps"))]
     pub fn format<F>(mut self, formatter: F) -> Self

@@ -226,7 +226,8 @@ fn test_local_timestamp() {
 
 #[test]
 fn test_kv_log() {
-    let logger = CallLogger::default().with_call_target("scripts/to_file.sh test_kv_log.log");
+    let filename = "test_kv_log.log";
+    let logger = CallLogger::default().with_call_target(format!("scripts/to_file.sh {}", filename));
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
@@ -237,17 +238,21 @@ fn test_kv_log() {
             .build(),
     );
     thread::sleep(time::Duration::from_millis(20));
-    if let Ok(test) = read_to_string("test_kv_log.log") {
-        assert!(test.contains("\"test_item\":\"test_value\""));
-        assert!(test.contains("\"level\":\"INFO\""));
-        assert!(test.contains("\"file\":\"src/lib.rs\""));
-        assert!(test.contains("\"module_path\":\"call_logger::test\""));
-        assert!(test.contains("\"msg\":\"test message\""));
-        remove_file("test_kv_log.log").unwrap();
-        thread::sleep(time::Duration::from_millis(10));
-    } else {
-        panic!("test_kv_log.log cannot be read, consider increasing how long we wait for the test file to be written");
+    for _ in 0..20 {
+        if let Ok(test) = read_to_string(filename) {
+            assert!(test.contains("\"test_item\":\"test_value\""));
+            assert!(test.contains("\"level\":\"INFO\""));
+            assert!(test.contains("\"file\":\"src/lib.rs\""));
+            assert!(test.contains("\"module_path\":\"call_logger::test\""));
+            assert!(test.contains("\"msg\":\"test message\""));
+            remove_file(filename).unwrap();
+            thread::sleep(time::Duration::from_millis(10));
+            return;
+        } else {
+            thread::sleep(time::Duration::from_millis(100));
+        }
     }
+    panic!("{filename} cannot be read");
 }
 
 #[test]
