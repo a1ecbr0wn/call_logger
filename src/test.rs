@@ -12,9 +12,7 @@ use std::{
 #[test]
 fn test_log() {
     let filename = "test_log.log";
-    let logger = CallLogger::new()
-        .with_call_target(format!("scripts/to_file.sh {}", filename))
-        .echo();
+    let logger = CallLogger::new().with_call_target(format!("scripts/to_file.sh {}", filename));
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
@@ -275,8 +273,7 @@ fn test_call_web_target_json() {
     let url = server.url();
     let logger = CallLogger::new()
         .with_level(LevelFilter::Error)
-        .with_call_target(format!("{url}/test"))
-        .echo();
+        .with_call_target(format!("{url}/test"));
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))

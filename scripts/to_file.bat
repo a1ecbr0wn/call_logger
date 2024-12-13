@@ -1,1 +1,1 @@
-echo %1 > test.log
+echo %2 > %1
