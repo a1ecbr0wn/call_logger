@@ -1,4 +1,4 @@
-# example/log_to_discord
+# Setup notes for `example/log_to_discord`
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ pip3 install requests
 Create a webhook in the server of your choice and save it as an environment variable `CALL_LOGGER_DISCORD`.
 
 ``` sh
-cargo run --example log_to_discord
+cargo run --example log_to_discord_script
 ```
 
 ... and the output of my discord tests are [here](https://discord.gg/eQzwkH5xSh)

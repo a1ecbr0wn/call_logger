@@ -1,7 +1,7 @@
-//! A logger that calls another application on each log event
+//! A logger that calls another application or a web service on each log event.
 //!
-//! The target application that this library calls, is passed a JSON formatted parameter that displays the
-//! information about the log call to the target application.
+//! The target application or URL that this library calls, is passed a formatted
+//! string that defaults to a JSON representation of the logged record.
 //!
 //! # Why would you do this?
 //!
@@ -42,6 +42,15 @@
 //!     let _ = call_logger::CallLogger::new()
 //!         .with_call_target(endpoint)
 //!         .with_level(log::LevelFilter::Info)
+//!         .format(|timestamp, message, record| {
+//!             format!(
+//!                 "{{ \"content\": \"{} [{}] {} - {}\" }}",
+//!                 timestamp,
+//!                 record.level(),
+//!                 record.module_path().unwrap_or_default(),
+//!                 message
+//!             )
+//!         })
 //!         .init();
 //!     log::info!("msg");
 //! }
@@ -74,7 +83,15 @@ enum TimestampFormat {
     Local,
 }
 
-/// Implements [`Log`] and some simple builder methods to configure.
+/// The `CallLogger` implements [`Log`] and provides some simple builder methods to help configure what and how to log.
+/// Some sensible defaults are provided to perform the simple case of calling the `echo` program for all error level
+/// logs with a JSON representation of the logged item.  The logger then needs to be initialized (`.init()`) before use.
+///
+/// # Example - The simple logger that calls `echo`
+/// ```
+/// # use call_logger::CallLogger;
+/// CallLogger::new().init();
+/// ```
 pub struct CallLogger {
     /// The default logging level
     level: LevelFilter,
@@ -96,9 +113,15 @@ pub struct CallLogger {
 }
 
 impl CallLogger {
-    /// Creates a new `CallLogger`, use this along with the builder methods and then call `init` to
-    /// set up the logger.  The default timestamp format is utc epoch (if the `timestamps` feature
-    /// is enabled), and the default call app that is called is `echo`.
+    /// Creates a new `CallLogger`, use this along with the builder methods and then call `init` to set up the logger.  
+    /// The default timestamp format is utc epoch (if the `timestamps` feature is enabled), and the default call app
+    /// that is called is `echo`.
+    ///
+    /// # Example
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new().init();
+    /// ```
     pub fn new() -> CallLogger {
         CallLogger {
             level: LevelFilter::Trace,
@@ -114,7 +137,16 @@ impl CallLogger {
         }
     }
 
-    /// The maximum log level that would be logged
+    /// The maximum log level that would be logged.
+    ///
+    /// # Example
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// # use log::LevelFilter;
+    /// CallLogger::new()
+    ///     .with_level(LevelFilter::Error)
+    ///     .init();
+    /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn with_level(mut self, level: LevelFilter) -> CallLogger {
@@ -123,7 +155,23 @@ impl CallLogger {
         self
     }
 
-    /// Sets the command line app or script that is called and passed the log details
+    /// Sets the command line application, script or URL that is called and passed the log details.
+    ///
+    /// Example - Call an application with parameters
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new()
+    ///     .with_call_target("echo -n")
+    ///     .init();    
+    /// ```
+    ///
+    /// Example - Call a URL
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new()
+    ///     .with_call_target("https://postman-echo.com/post")
+    ///     .init();    
+    /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn with_call_target<T>(mut self, call_target: T) -> CallLogger
@@ -134,7 +182,7 @@ impl CallLogger {
         self
     }
 
-    /// Sets the timestamp to the number of milliseconds since the epoch
+    /// Sets the timestamp to the number of milliseconds since the epoch.
     #[inline]
     #[must_use = "You must call init() before logging"]
     #[cfg(feature = "timestamps")]
@@ -170,7 +218,15 @@ impl CallLogger {
         self
     }
 
-    /// Writes each call to console before making the call, use for debugging
+    /// Writes each call to console before making the call, use for debugging.
+    ///
+    /// Example
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new()
+    ///     .echo()
+    ///     .init();
+    /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn echo(mut self) -> CallLogger {
@@ -252,7 +308,13 @@ impl CallLogger {
         self
     }
 
-    /// This needs to be called after the builder has set up the logger
+    /// This needs to be called after the builder has set up the logger.
+    ///
+    /// # Example
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new().init();
+    /// ```
     pub fn init(self) -> Result<(), SetLoggerError> {
         log::set_boxed_logger(Box::new(self))?;
         Ok(())
@@ -404,6 +466,7 @@ impl Log for CallLogger {
     }
 }
 
+// Visitor for querying the kv pairs in a log record.
 struct LogVisitor {
     map: HashMap<String, String>,
 }
@@ -418,6 +481,7 @@ impl<'kvs> VisitSource<'kvs> for LogVisitor {
 /// The type alias for a log formatter.
 #[cfg(feature = "timestamps")]
 pub type Formatter = dyn Fn(String, &Arguments, &log::Record) -> String + Sync + Send + 'static;
+/// The type alias for a log formatter.
 #[cfg(not(feature = "timestamps"))]
 pub type Formatter = dyn Fn(&Arguments, &log::Record) -> String + Sync + Send + 'static;
 
