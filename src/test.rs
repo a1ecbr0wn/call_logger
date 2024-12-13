@@ -4,18 +4,17 @@ use log::{
     kv::{Source, ToKey, ToValue},
     Level,
 };
-use serial_test::{parallel, serial};
 use std::{
     fs::{read_to_string, remove_file},
     thread, time,
 };
 
 #[test]
-#[serial]
 fn test_log() {
+    let filename = "test_log.log";
     let logger = CallLogger::new()
-        .with_level(LevelFilter::Error)
-        .with_call_target("scripts/to_file.sh test_log.log".to_string());
+        .with_call_target(format!("scripts/to_file.sh {}", filename))
+        .echo();
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
@@ -25,12 +24,13 @@ fn test_log() {
             .build(),
     );
     for _ in 0..20 {
-        if let Ok(test) = read_to_string("test_log.log") {
-            assert!(test.contains("\"level\": \"ERROR\""));
-            assert!(test.contains("\"file\": \"src/lib.rs\""));
-            assert!(test.contains("\"module_path\": \"call_logger::test\""));
-            assert!(test.contains("\"msg\": \"test message\""));
-            remove_file("test_log.log").unwrap();
+        if let Ok(test) = read_to_string(filename) {
+            println!("{test}");
+            assert!(test.contains("\"level\":\"ERROR\""));
+            assert!(test.contains("\"file\":\"src/lib.rs\""));
+            assert!(test.contains("\"module_path\":\"call_logger::test\""));
+            assert!(test.contains("\"msg\":\"test message\""));
+            remove_file(filename).unwrap();
             thread::sleep(time::Duration::from_millis(10));
             return;
         } else {
@@ -41,17 +41,129 @@ fn test_log() {
 }
 
 #[test]
-#[serial]
+fn test_log_to_file() {
+    let filename = "test_log_to_file.log";
+    let logger = CallLogger::new()
+        .with_level(LevelFilter::Error)
+        .with_call_target("echo")
+        .to_file(filename);
+    logger.log(
+        &Record::builder()
+            .args(format_args!("test message"))
+            .file(Some("src/lib.rs"))
+            .module_path(Some("call_logger::test"))
+            .level(Level::Error)
+            .build(),
+    );
+    for _ in 0..20 {
+        if let Ok(test) = read_to_string(filename) {
+            assert!(test.contains("\"level\":\"ERROR\""));
+            assert!(test.contains("\"file\":\"src/lib.rs\""));
+            assert!(test.contains("\"module_path\":\"call_logger::test\""));
+            assert!(test.contains("\"msg\":\"test message\""));
+            remove_file(filename).unwrap();
+            thread::sleep(time::Duration::from_millis(10));
+            return;
+        } else {
+            thread::sleep(time::Duration::from_millis(100));
+        }
+    }
+    panic!("Failed to detect the log message");
+}
+
+#[test]
 fn test_log_default() {
     let logger = CallLogger::default();
     assert_eq!(logger.level, LevelFilter::Trace);
-    assert_eq!(logger.call_target, "echo".to_string());
+    assert_eq!(logger.call_target, "echo");
     let _ = logger.init();
     info!("test message");
 }
 
 #[test]
-#[parallel]
+#[cfg(feature = "timestamps")]
+fn test_log_format_ts() {
+    let filename = "test_log_format_ts.log";
+    let logger = CallLogger::default()
+        .format(|timestamp, message, record| {
+            format!(
+                "{{\"ts\":\"{}\",\"level\":\"{}\",\"file\":\"{}\",\"module_path\":\"{}\",\"msg\":\"{}\"}}",
+                timestamp,
+                record.level(),
+                record.file().unwrap_or_default(),
+                record.module_path().unwrap_or_default(),
+                message
+            )
+        })
+        .to_file(filename);
+    logger.log(
+        &Record::builder()
+            .args(format_args!("test message"))
+            .file(Some("src/lib.rs"))
+            .module_path(Some("call_logger::test"))
+            .level(Level::Error)
+            .build(),
+    );
+    for _ in 0..20 {
+        if let Ok(test) = read_to_string(filename) {
+            println!("{test}");
+            assert!(test.contains("\"ts\":\""));
+            assert!(test.contains("\"level\":\"ERROR\""));
+            assert!(test.contains("\"file\":\"src/lib.rs\""));
+            assert!(test.contains("\"module_path\":\"call_logger::test\""));
+            assert!(test.contains("\"msg\":\"test message\""));
+            remove_file(filename).unwrap();
+            thread::sleep(time::Duration::from_millis(10));
+            return;
+        } else {
+            thread::sleep(time::Duration::from_millis(100));
+        }
+    }
+    panic!("Failed to detect the log message");
+}
+
+#[test]
+#[cfg(not(feature = "timestamps"))]
+fn test_log_format_no_ts() {
+    let filename = "test_log_format_no_ts.log";
+    let logger = CallLogger::default()
+        .format(|message, record| {
+            format!(
+                "{{\"level\":\"{}\",\"file\":\"{}\",\"module_path\":\"{}\",\"msg\":\"{}\"}}",
+                record.level(),
+                record.file().unwrap_or_default(),
+                record.module_path().unwrap_or_default(),
+                message
+            )
+        })
+        .to_file(filename);
+    logger.log(
+        &Record::builder()
+            .args(format_args!("test message"))
+            .file(Some("src/lib.rs"))
+            .module_path(Some("call_logger::test"))
+            .level(Level::Error)
+            .build(),
+    );
+    for _ in 0..20 {
+        if let Ok(test) = read_to_string(filename) {
+            println!("{test}");
+            assert!(!test.contains("\"ts\":\""));
+            assert!(test.contains("\"level\":\"ERROR\""));
+            assert!(test.contains("\"file\":\"src/lib.rs\""));
+            assert!(test.contains("\"module_path\":\"call_logger::test\""));
+            assert!(test.contains("\"msg\":\"test message\""));
+            remove_file(filename).unwrap();
+            thread::sleep(time::Duration::from_millis(10));
+            return;
+        } else {
+            thread::sleep(time::Duration::from_millis(100));
+        }
+    }
+    panic!("Failed to detect the log message");
+}
+
+#[test]
 fn test_log_quoted_string() {
     let logger = CallLogger::default();
     assert_eq!(logger.level, LevelFilter::Trace);
@@ -61,7 +173,6 @@ fn test_log_quoted_string() {
 }
 
 #[test]
-#[parallel]
 fn test_log_level_filter() {
     let logger = CallLogger::new().with_level(LevelFilter::Error);
     assert_eq!(logger.level, LevelFilter::Error);
@@ -74,21 +185,18 @@ fn test_log_level_filter() {
 }
 
 #[test]
-#[parallel]
 fn test_level() {
     let logger = CallLogger::default().with_level(LevelFilter::Info);
     assert_eq!(logger.level, LevelFilter::Info);
 }
 
 #[test]
-#[parallel]
 fn test_call_target() {
-    let logger = CallLogger::default().with_call_target("wc".to_string());
+    let logger = CallLogger::default().with_call_target("wc");
     assert_eq!(logger.call_target, "wc".to_string());
 }
 
 #[test]
-#[parallel]
 #[cfg(feature = "timestamps")]
 fn test_epoch_ms_timestamp() {
     let logger = CallLogger::default().with_epoch_ms_timestamp();
@@ -96,7 +204,6 @@ fn test_epoch_ms_timestamp() {
 }
 
 #[test]
-#[parallel]
 #[cfg(feature = "timestamps")]
 fn test_epoch_us_timestamp() {
     let logger = CallLogger::default().with_epoch_us_timestamp();
@@ -104,7 +211,6 @@ fn test_epoch_us_timestamp() {
 }
 
 #[test]
-#[parallel]
 #[cfg(feature = "timestamps")]
 fn test_utc_timestamp() {
     let logger = CallLogger::default().with_utc_timestamp();
@@ -112,7 +218,6 @@ fn test_utc_timestamp() {
 }
 
 #[test]
-#[parallel]
 #[cfg(feature = "timestamps")]
 fn test_local_timestamp() {
     let logger = CallLogger::default().with_local_timestamp();
@@ -120,18 +225,12 @@ fn test_local_timestamp() {
 }
 
 #[test]
-#[serial]
 fn test_kv_log() {
-    let logger =
-        CallLogger::default().with_call_target("scripts/to_file.sh test_kv_log.log".to_string());
-    let source = TestSource {
-        key: "test_item".to_string(),
-        value: "test_value".to_string(),
-    };
+    let logger = CallLogger::default().with_call_target("scripts/to_file.sh test_kv_log.log");
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
-            .key_values(&source)
+            .key_values(&TestSource::new("test_item", "test_value"))
             .file(Some("src/lib.rs"))
             .module_path(Some("call_logger::test"))
             .level(Level::Info)
@@ -139,11 +238,11 @@ fn test_kv_log() {
     );
     thread::sleep(time::Duration::from_millis(20));
     if let Ok(test) = read_to_string("test_kv_log.log") {
-        assert!(test.contains("\"test_item\": \"test_value\""));
-        assert!(test.contains("\"level\": \"INFO\""));
-        assert!(test.contains("\"file\": \"src/lib.rs\""));
-        assert!(test.contains("\"module_path\": \"call_logger::test\""));
-        assert!(test.contains("\"msg\": \"test message\""));
+        assert!(test.contains("\"test_item\":\"test_value\""));
+        assert!(test.contains("\"level\":\"INFO\""));
+        assert!(test.contains("\"file\":\"src/lib.rs\""));
+        assert!(test.contains("\"module_path\":\"call_logger::test\""));
+        assert!(test.contains("\"msg\":\"test message\""));
         remove_file("test_kv_log.log").unwrap();
         thread::sleep(time::Duration::from_millis(10));
     } else {
@@ -152,7 +251,6 @@ fn test_kv_log() {
 }
 
 #[test]
-#[serial]
 fn test_call_web_target_json() {
     let mut server = mockito::Server::new();
     let mock = server
@@ -170,18 +268,14 @@ fn test_call_web_target_json() {
         .with_body("msg")
         .create();
     let url = server.url();
-    println!("url: {url}/test");
     let logger = CallLogger::new()
         .with_level(LevelFilter::Error)
-        .with_call_target(format!("{url}/test").to_string())
+        .with_call_target(format!("{url}/test"))
         .echo();
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
-            .key_values(&TestSource {
-                key: "test_item".to_string(),
-                value: "test_value".to_string(),
-            })
+            .key_values(&TestSource::new("test_item", "test_value"))
             .file(Some("src/lib.rs"))
             .module_path(Some("call_logger::test_call_web_target_json"))
             .level(Level::Error)
@@ -193,6 +287,18 @@ fn test_call_web_target_json() {
 struct TestSource {
     key: String,
     value: String,
+}
+
+impl TestSource {
+    fn new<T>(key: T, value: T) -> TestSource
+    where
+        T: Into<String>,
+    {
+        TestSource {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
 }
 
 impl Source for TestSource {
