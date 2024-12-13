@@ -56,7 +56,7 @@ jobs:
         run: cargo build
 
   test:
-    name: CI Build
+    name: CI Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
