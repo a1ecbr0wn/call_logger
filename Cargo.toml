@@ -26,6 +26,7 @@ reqwest = { version = "0.12", features = ["blocking"] }
 [dev-dependencies]
 multi_log = "0.1.2"
 mockito = "1.6.1"
+fern = "0.7"
 
 [[example]]
 name = "log_to_discord_script"
@@ -37,4 +38,8 @@ required-features = ["timestamps"]
 
 [[example]]
 name = "log_filtering"
+required-features = ["timestamps"]
+
+[[example]]
+name = "log_with_fern"
 required-features = ["timestamps"]

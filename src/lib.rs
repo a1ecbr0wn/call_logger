@@ -58,6 +58,7 @@
 //! ```
 
 use std::{
+    borrow::Cow,
     collections::{HashMap, VecDeque},
     fmt::Arguments,
     fs::write,
@@ -94,8 +95,11 @@ enum TimestampFormat {
 /// CallLogger::new().init();
 /// ```
 pub struct CallLogger {
-    /// The default logging level
+    /// The default logging level filter
     level: LevelFilter,
+
+    /// Custom level filters per module
+    levels: Vec<(Cow<'static, str>, log::LevelFilter)>,
 
     /// The target call to make every time a logging event occurs
     call_target: String,
@@ -126,6 +130,7 @@ impl CallLogger {
     pub fn new() -> CallLogger {
         CallLogger {
             level: LevelFilter::Trace,
+            levels: Vec::new(),
 
             // default to calling echo which will output the log event to console
             call_target: "echo".into(),
@@ -153,6 +158,28 @@ impl CallLogger {
     pub fn with_level(mut self, level: LevelFilter) -> CallLogger {
         self.level = level;
         log::set_max_level(self.level);
+        self
+    }
+
+    #[inline]
+    #[must_use = "You must call init() before logging"]
+    pub fn with_level_for<T: Into<Cow<'static, str>>>(
+        mut self,
+        module: T,
+        level: log::LevelFilter,
+    ) -> Self {
+        let module = module.into();
+
+        if let Some((index, _)) = self
+            .levels
+            .iter()
+            .enumerate()
+            .find(|(_, (name, _))| *name == module)
+        {
+            self.levels.remove(index);
+        }
+
+        self.levels.push((module, level));
         self
     }
 

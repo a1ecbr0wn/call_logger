@@ -55,6 +55,18 @@ jobs:
       - name: Build
         run: cargo build
 
+      - name: build example log_echo
+        run: cargo run --example log_echo
+
+      - name: build example log_to_discord_script
+        run: cargo run --example log_to_discord_script
+
+      - name: Build example log_to_discord_url
+        run: cargo build --example log_to_discord_url
+
+      - name: Build example log_with_fern
+        run: cargo build --example log_with_fern
+
   test:
     name: CI Test
     runs-on: ubuntu-latest
