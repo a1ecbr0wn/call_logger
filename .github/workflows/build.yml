@@ -54,3 +54,28 @@ jobs:
 
       - name: Build
         run: cargo build
+
+  test:
+    name: CI Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable]
+        TARGET:
+          - x86_64-unknown-linux-gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Toolchain setup
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.TARGET }}
+
+      - name: Test Features
+        run: cargo test --all-features
+
+      - name: Test Without Features
+        run: cargo test --no-default-features

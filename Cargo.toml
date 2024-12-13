@@ -1,6 +1,6 @@
 [package]
 name = "call_logger"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Alec Brown <alec@noser.net>"]
 description = "A logger that calls another application for every logged item"
@@ -20,13 +20,19 @@ minimal = []
 
 [dependencies]
 log = { version = "^0.4.22", features = ["std", "kv"] }
-chrono = { version = "0.4.38", features = ["clock"], optional = true }
+chrono = { version = "0.4", features = ["clock"], optional = true }
+reqwest = { version = "0.12", features = ["blocking"] }
 
 [dev-dependencies]
 multi_log = "0.1.2"
+mockito = "1.6.1"
 
 [[example]]
-name = "log_to_discord"
+name = "log_to_discord_script"
+required-features = ["timestamps"]
+
+[[example]]
+name = "log_to_discord_url"
 required-features = ["timestamps"]
 
 [[example]]

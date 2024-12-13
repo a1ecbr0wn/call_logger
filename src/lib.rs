@@ -15,13 +15,45 @@
 //!   - add a timestamp to the output
 //!   - the timestamp can be set to one of a number of formats specified by a number of [`CallLogger`] builder functions
 //!
-//! # Example
+//! # Example - Call default application (`echo`) for each log and default info level,
+//! `.new()` defaults to calling `echo` and therefore is analagous to `.with_call_target("echo")`
 //! ```
-//! let _ = call_logger::CallLogger::new().with_level(log::LevelFilter::Info).init();
+//! let _ = call_logger::CallLogger::new()
+//!     .with_level(log::LevelFilter::Info).init();
 //! log::info!("msg");
 //! ```
+//!
+//! # Example - Call an application for each log and write the result of the call to a file
+//! ```
+//! let _ = call_logger::CallLogger::new()
+//!     .with_call_target("echo")
+//!     .to_file("test.log")
+//!     .with_level(log::LevelFilter::Info)
+//!     .init();
+//! log::info!("msg");
+//! # use std::fs::remove_file;
+//! # remove_file("test.log").unwrap()
+//! ```
+//!
+//! # Example - Send all output to Discord via their API
+//! ```
+//! // Get the API endpoint from an environment variable, URL should start with `https://discord.com/api/webhooks/`
+//! if let Ok(endpoint) = std::env::var("DISCORD_API") {
+//!     let _ = call_logger::CallLogger::new()
+//!         .with_call_target(endpoint)
+//!         .with_level(log::LevelFilter::Info)
+//!         .init();
+//!     log::info!("msg");
+//! }
+//! ```
 
-use std::{collections::HashMap, process::Command};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt::Arguments,
+    fs::write,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use log::kv::{Error, Key, Value, VisitSource};
 use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
@@ -54,6 +86,11 @@ pub struct CallLogger {
     #[cfg(feature = "timestamps")]
     timestamp: TimestampFormat,
 
+    /// The file to write the output of the call to
+    file: Option<PathBuf>,
+
+    formatter: Box<Formatter>,
+
     /// Echo everything to console just before making the call, to aid debugging.
     echo: bool,
 }
@@ -67,12 +104,13 @@ impl CallLogger {
             level: LevelFilter::Trace,
 
             // default to calling echo which will output the log event to console
-            call_target: "echo".to_string(),
+            call_target: "echo".into(),
 
             #[cfg(feature = "timestamps")]
             timestamp: TimestampFormat::Utc,
-
+            file: None,
             echo: false,
+            formatter: Box::new(Self::json_formatter),
         }
     }
 
@@ -88,8 +126,11 @@ impl CallLogger {
     /// Sets the command line app or script that is called and passed the log details
     #[inline]
     #[must_use = "You must call init() before logging"]
-    pub fn with_call_target(mut self, call_target: String) -> CallLogger {
-        self.call_target = call_target;
+    pub fn with_call_target<T>(mut self, call_target: T) -> CallLogger
+    where
+        T: Into<String>,
+    {
+        self.call_target = call_target.into();
         self
     }
 
@@ -137,16 +178,163 @@ impl CallLogger {
         self
     }
 
+    /// Write the output of the call to a file
+    #[inline]
+    #[must_use = "You must call init() before logging"]
+    pub fn to_file<P>(mut self, file: P) -> CallLogger
+    where
+        P: AsRef<Path>,
+    {
+        self.file = Some(PathBuf::from(file.as_ref()));
+        self
+    }
+
+    /// Sets the formatter of this logger. The closure should accept a formatted
+    /// value for a timestamp, a message and a log record, and return a `String`
+    /// representation of the message that has been formatted.
+    ///
+    /// [`fmt::Arguments`]: https://doc.rust-lang.org/std/fmt/struct.Arguments.html
+    ///
+    /// Example usage:
+    ///
+    /// ```
+    ///     let _ = call_logger::CallLogger::new()
+    ///         .format(|timestamp, message, record| {
+    ///             format!(
+    ///                 "{{ \"content\": \"{} [{}] {} - {}\" }}",
+    ///                 timestamp,
+    ///                 record.level(),
+    ///                 record.module_path().unwrap_or_default(),
+    ///                 message
+    ///             )
+    ///         })
+    ///         .init();
+    ///     log::info!("msg");
+    /// ```
+    #[inline]
+    #[cfg(feature = "timestamps")]
+    pub fn format<F>(mut self, formatter: F) -> Self
+    where
+        F: Fn(String, &Arguments, &log::Record) -> String + Sync + Send + 'static,
+    {
+        self.formatter = Box::new(formatter);
+        self
+    }
+
+    /// Sets the formatter of this logger. The closure should accept a message
+    /// and a log record, and return a `String` representation of the message
+    /// that has been formatted.
+    ///
+    /// [`fmt::Arguments`]: https://doc.rust-lang.org/std/fmt/struct.Arguments.html
+    ///
+    /// Example usage:
+    ///
+    /// ```
+    ///     let _ = call_logger::CallLogger::new()
+    ///         .format(|message, record| {
+    ///             format!(
+    ///                 "{{ \"content\": \"[{}] {} - {}\" }}",
+    ///                 record.level(),
+    ///                 record.module_path().unwrap_or_default(),
+    ///                 message
+    ///             )
+    ///         })
+    ///         .init();
+    ///     log::info!("msg");
+    /// ```
+    #[inline]
+    #[cfg(not(feature = "timestamps"))]
+    pub fn format<F>(mut self, formatter: F) -> Self
+    where
+        F: Fn(&Arguments, &log::Record) -> String + Sync + Send + 'static,
+    {
+        self.formatter = Box::new(formatter);
+        self
+    }
+
     /// This needs to be called after the builder has set up the logger
     pub fn init(self) -> Result<(), SetLoggerError> {
         log::set_boxed_logger(Box::new(self))?;
         Ok(())
     }
+
+    #[cfg(feature = "timestamps")]
+    fn format_timestamp(&self) -> String {
+        match &self.timestamp {
+            TimestampFormat::UtcEpochMs => SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Leap second or time went backwards")
+                .as_millis()
+                .to_string(),
+            TimestampFormat::UtcEpochUs => SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Leap second or time went backwards")
+                .as_micros()
+                .to_string(),
+            TimestampFormat::Utc => Into::<DateTime<Utc>>::into(SystemTime::now())
+                .to_rfc3339()
+                .to_string(),
+            TimestampFormat::Local => Into::<DateTime<Local>>::into(SystemTime::now())
+                .to_rfc3339()
+                .to_string(),
+        }
+    }
+
+    #[cfg(not(feature = "timestamps"))]
+    fn json_formatter(message: &Arguments, record: &log::Record) -> String {
+        Self::json_formatter_inner(String::new(), message, record)
+    }
+
+    #[cfg(feature = "timestamps")]
+    fn json_formatter(timestamp: String, message: &Arguments, record: &log::Record) -> String {
+        Self::json_formatter_inner(timestamp.to_string(), message, record)
+    }
+
+    fn json_formatter_inner(
+        timestamp: String,
+        message: &Arguments,
+        record: &log::Record,
+    ) -> String {
+        let timestamp = format!("\"ts\":\"{timestamp}\",");
+        let level = format!("\"level\":\"{}\",", record.level());
+        let file = match record.file() {
+            Some(file) => format!("\"file\":\"{file}\","),
+            None => "".to_string(),
+        };
+        let line = match record.line() {
+            Some(line) => format!("\"line\":\"{line}\","),
+            None => "".to_string(),
+        };
+        let module_path = match record.module_path() {
+            Some(module_path) => format!("\"module_path\":\"{module_path}\","),
+            None => "".to_string(),
+        };
+        let mut visitor = LogVisitor {
+            map: HashMap::new(),
+        };
+        let kv_str = if let Ok(()) = record.key_values().visit(&mut visitor) {
+            let mut msg = String::new();
+            for (key, value) in visitor.map {
+                msg.push_str(&format!("\"{key}\":\"{value}\","));
+            }
+            msg
+        } else {
+            "".to_string()
+        };
+        let msg = format!(
+            "\"msg\":\"{}\"",
+            message
+                .to_string()
+                .replace('\\', "\\\\")
+                .replace('\"', "\\\"")
+        );
+        format!("{{{timestamp}{level}{file}{line}{module_path}{kv_str}{msg}}}")
+    }
 }
 
 impl Default for CallLogger {
     fn default() -> Self {
-        CallLogger::new()
+        Self::new()
     }
 }
 
@@ -157,87 +345,55 @@ impl Log for CallLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            let timestamp = {
-                #[cfg(feature = "timestamps")]
-                match &self.timestamp {
-                    TimestampFormat::UtcEpochMs => format!(
-                        "\"ts\": \"{}\", ",
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Leap second or time went backwards")
-                            .as_millis()
-                    ),
-                    TimestampFormat::UtcEpochUs => format!(
-                        "\"ts\": \"{}\", ",
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Leap second or time went backwards")
-                            .as_micros()
-                    ),
-                    TimestampFormat::Utc => format!(
-                        "\"ts\": \"{}\", ",
-                        Into::<DateTime<Utc>>::into(SystemTime::now()).to_rfc3339()
-                    ),
-                    TimestampFormat::Local => format!(
-                        "\"ts\": \"{}\", ",
-                        Into::<DateTime<Local>>::into(SystemTime::now()).to_rfc3339()
-                    ),
+            let formatter = &self.formatter;
+            #[cfg(feature = "timestamps")]
+            let params = formatter(self.format_timestamp(), record.args(), record);
+            #[cfg(not(feature = "timestamps"))]
+            let params = formatter(record.args(), record);
+            if self.call_target.starts_with("http://") || self.call_target.starts_with("https://") {
+                if self.echo {
+                    println!("Calling: `{}\n\t{params}`", self.call_target);
                 }
-
-                #[cfg(not(feature = "timestamps"))]
-                ""
-            };
-            let level = format!("\"level\": \"{}\", ", record.level());
-            let file = match record.file() {
-                Some(file) => format!("\"file\": \"{file}\", "),
-                None => "".to_string(),
-            };
-            let line = match record.line() {
-                Some(line) => format!("\"line\": \"{line}\", "),
-                None => "".to_string(),
-            };
-            let module_path = match record.module_path() {
-                Some(module_path) => format!("\"module_path\": \"{module_path}\", "),
-                None => "".to_string(),
-            };
-            let mut visitor = LogVisitor {
-                map: HashMap::new(),
-            };
-            let kv_str = if let Ok(()) = record.key_values().visit(&mut visitor) {
-                let mut msg = String::new();
-                for (key, value) in visitor.map {
-                    msg.push_str(&format!("\"{key}\": \"{value}\", "));
+                reqwest::blocking::Client::new()
+                    .post(&self.call_target)
+                    .header("Content-Type", "application/json")
+                    .body(params)
+                    .send()
+                    .unwrap();
+            } else {
+                let mut args = if let Some((header, trailer)) = self.call_target.split_once("{}") {
+                    let mut args = header.split(' ').collect::<VecDeque<&str>>();
+                    args.push_back(params.as_str());
+                    for arg in trailer.split(' ') {
+                        args.push_back(arg);
+                    }
+                    args
+                } else {
+                    let mut args = self.call_target.split(' ').collect::<VecDeque<&str>>();
+                    args.push_back(params.as_str());
+                    args
+                };
+                if self.echo {
+                    println!("Calling: `{}`", Vec::from(args.clone()).join(" "));
                 }
-                msg
-            } else {
-                "".to_string()
-            };
-            let msg = format!(
-                "\"msg\": \"{}\"",
-                record
-                    .args()
-                    .to_string()
-                    .replace('\\', "\\\\")
-                    .replace('\"', "\\\"")
-            );
-            let json = format!("{{ {timestamp}{level}{file}{line}{module_path}{kv_str}{msg} }}");
-            if self.echo {
-                println!("Calling: `{} {json}`", self.call_target);
-            }
-            let mut args = self.call_target.split(' ');
-            let call_target = args.next().unwrap();
-            let call_rtn = if args.clone().count() > 0 {
-                Command::new(call_target)
-                    .args(args)
-                    .args([json.as_str()])
-                    .spawn()
-            } else {
-                Command::new(call_target).args([json]).spawn()
-            };
-            match call_rtn {
-                Ok(_) => {}
-                Err(x) => {
-                    println!("call to {} failed {x}", self.call_target);
+                let call_target = args.pop_front().unwrap();
+                match self.file {
+                    Some(_) => match Command::new(call_target).args(args).output() {
+                        Ok(output) => {
+                            if let Some(file) = &self.file {
+                                let _ = write(file, &output.stdout);
+                            }
+                        }
+                        Err(x) => {
+                            println!("call to {} failed {x}", self.call_target);
+                        }
+                    },
+                    None => match Command::new(call_target).args(args).spawn() {
+                        Ok(_) => {}
+                        Err(x) => {
+                            println!("call to {} failed {x}", self.call_target);
+                        }
+                    },
                 }
             }
         }
@@ -259,158 +415,11 @@ impl<'kvs> VisitSource<'kvs> for LogVisitor {
     }
 }
 
+/// The type alias for a log formatter.
+#[cfg(feature = "timestamps")]
+pub type Formatter = dyn Fn(String, &Arguments, &log::Record) -> String + Sync + Send + 'static;
+#[cfg(not(feature = "timestamps"))]
+pub type Formatter = dyn Fn(&Arguments, &log::Record) -> String + Sync + Send + 'static;
+
 #[cfg(test)]
-mod test {
-    use super::*;
-    use log::{
-        kv::{Source, ToKey, ToValue},
-        Level,
-    };
-    use std::{
-        fs::{read_to_string, remove_file},
-        thread, time,
-    };
-
-    #[test]
-    fn test_log() {
-        let logger = CallLogger::new()
-            .with_level(LevelFilter::Error)
-            .with_call_target("scripts/to_file.sh test_log.log".to_string());
-        logger.log(
-            &Record::builder()
-                .args(format_args!("test message"))
-                .file(Some("src/lib.rs"))
-                .module_path(Some("call_logger::test"))
-                .level(Level::Error)
-                .build(),
-        );
-        for _ in 0..20 {
-            if let Ok(test) = read_to_string("test_log.log") {
-                println!("test_log.log: {test}");
-                assert!(test.contains("\"level\": \"ERROR\""));
-                assert!(test.contains("\"file\": \"src/lib.rs\""));
-                assert!(test.contains("\"module_path\": \"call_logger::test\""));
-                assert!(test.contains("\"msg\": \"test message\""));
-                remove_file("test_log.log").unwrap();
-                thread::sleep(time::Duration::from_millis(10));
-                return;
-            } else {
-                thread::sleep(time::Duration::from_millis(100));
-            }
-        }
-        panic!("Failed to detect the log message");
-    }
-
-    #[test]
-    fn test_log_default() {
-        let logger = CallLogger::default();
-        assert_eq!(logger.level, LevelFilter::Trace);
-        assert_eq!(logger.call_target, "echo".to_string());
-        let _ = logger.init();
-        log::info!("test message");
-    }
-
-    #[test]
-    fn test_log_quoted_string() {
-        let logger = CallLogger::default();
-        assert_eq!(logger.level, LevelFilter::Trace);
-        assert_eq!(logger.call_target, "echo".to_string());
-        let msg = r#"{ "message": "test message" }"#;
-        logger.log(&Record::builder().args(format_args!("{msg}")).build());
-    }
-
-    #[test]
-    fn test_log_level_filter() {
-        let logger = CallLogger::new().with_level(LevelFilter::Error);
-        assert_eq!(logger.level, LevelFilter::Error);
-        assert_eq!(logger.call_target, "echo".to_string());
-        logger.log(
-            &Record::builder()
-                .args(format_args!("filtered message"))
-                .build(),
-        );
-    }
-
-    #[test]
-    fn test_level() {
-        let logger = CallLogger::default().with_level(LevelFilter::Info);
-        assert_eq!(logger.level, LevelFilter::Info);
-    }
-
-    #[test]
-    fn test_call_target() {
-        let logger = CallLogger::default().with_call_target("wc".to_string());
-        assert_eq!(logger.call_target, "wc".to_string());
-    }
-
-    #[test]
-    #[cfg(feature = "timestamps")]
-    fn test_epoch_ms_timestamp() {
-        let logger = CallLogger::default().with_epoch_ms_timestamp();
-        assert_eq!(logger.timestamp, TimestampFormat::UtcEpochMs);
-    }
-
-    #[test]
-    #[cfg(feature = "timestamps")]
-    fn test_epoch_us_timestamp() {
-        let logger = CallLogger::default().with_epoch_us_timestamp();
-        assert_eq!(logger.timestamp, TimestampFormat::UtcEpochUs);
-    }
-
-    #[test]
-    #[cfg(feature = "timestamps")]
-    fn test_utc_timestamp() {
-        let logger = CallLogger::default().with_utc_timestamp();
-        assert_eq!(logger.timestamp, TimestampFormat::Utc);
-    }
-
-    #[test]
-    #[cfg(feature = "timestamps")]
-    fn test_local_timestamp() {
-        let logger = CallLogger::default().with_local_timestamp();
-        assert_eq!(logger.timestamp, TimestampFormat::Local);
-    }
-
-    #[test]
-    fn test_kv_log() {
-        let logger = CallLogger::default()
-            .with_call_target("scripts/to_file.sh test_kv_log.log".to_string());
-        let source = TestSource {
-            key: "test".to_string(),
-            value: "value".to_string(),
-        };
-        logger.log(
-            &Record::builder()
-                .args(format_args!("test message"))
-                .key_values(&source)
-                .file(Some("src/lib.rs"))
-                .module_path(Some("call_logger::test"))
-                .level(Level::Info)
-                .build(),
-        );
-        thread::sleep(time::Duration::from_millis(20));
-        if let Ok(test) = read_to_string("test_kv_log.log") {
-            println!("test_kv_log.log: {test}");
-            assert!(test.contains("\"test\": \"value\""));
-            assert!(test.contains("\"level\": \"INFO\""));
-            assert!(test.contains("\"file\": \"src/lib.rs\""));
-            assert!(test.contains("\"module_path\": \"call_logger::test\""));
-            assert!(test.contains("\"msg\": \"test message\""));
-            remove_file("test_kv_log.log").unwrap();
-            thread::sleep(time::Duration::from_millis(10));
-        } else {
-            panic!("test_kv_log.log cannot be read, consider increasing how long we wait for the test file to be written");
-        }
-    }
-
-    struct TestSource {
-        key: String,
-        value: String,
-    }
-
-    impl Source for TestSource {
-        fn visit<'kvs>(&'kvs self, visitor: &mut dyn VisitSource<'kvs>) -> Result<(), Error> {
-            visitor.visit_pair(self.key.to_key(), self.value.to_value())
-        }
-    }
-}
+mod test;
