@@ -55,10 +55,10 @@ jobs:
       - name: Build
         run: cargo build
 
-      - name: build example log_echo
+      - name: Build example log_echo
         run: cargo run --example log_echo
 
-      - name: build example log_to_discord_script
+      - name: Build example log_to_discord_script
         run: cargo run --example log_to_discord_script
 
       - name: Build example log_to_discord_url
