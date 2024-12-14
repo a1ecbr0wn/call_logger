@@ -1,8 +1,8 @@
 //! A logger that calls another application or a web service on each log event.
 //!
-//! The target application or URL that this library calls, is passed a formatted string that defaults to a JSON 
+//! The target application or URL that this library calls, is passed a formatted string that defaults to a JSON
 //! representation of the logged record.
-//! 
+//!
 //! If you would like some ideas about how to use this crate, see [the examples][gh-repo-examples] in the GitHub source
 //! repository.
 //!
@@ -59,9 +59,8 @@
 //!     log::info!("msg");
 //! }
 //! ```
-//! 
+//!
 //! [gh-repo-examples]: https://github.com/a1ecbr0wn/call_logger/tree/main/examples
-
 
 use std::{
     borrow::Cow,
