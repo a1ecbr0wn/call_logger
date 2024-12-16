@@ -63,7 +63,6 @@
 //! [gh-repo-examples]: https://github.com/a1ecbr0wn/call_logger/tree/main/examples
 
 use std::{
-    borrow::Cow,
     collections::{HashMap, VecDeque},
     fmt::Arguments,
     fs::write,
@@ -104,7 +103,7 @@ pub struct CallLogger {
     level: LevelFilter,
 
     /// Custom level filters per module
-    levels: Vec<(Cow<'static, str>, log::LevelFilter)>,
+    levels: Vec<(String, log::LevelFilter)>,
 
     /// The target call to make every time a logging event occurs
     call_target: String,
@@ -166,25 +165,32 @@ impl CallLogger {
         self
     }
 
+    /// The maximum log level that would be logged for a module where the target string is found in the log item's
+    /// target or module path.
+    ///
+    /// # Example matching a module name
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// # use log::{error, LevelFilter};
+    /// CallLogger::new()
+    ///     .with_level_for("call_logger", LevelFilter::Error)
+    ///     .init();
+    /// error!("test");
+    /// ```
+    ///
+    /// # Example matching a target
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// # use log::{error, LevelFilter};
+    /// CallLogger::new()
+    ///     .with_level_for("call-target", LevelFilter::Error)
+    ///     .init();
+    /// error!(target: "call-target", "test");
+    /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]
-    pub fn with_level_for<T: Into<Cow<'static, str>>>(
-        mut self,
-        module: T,
-        level: log::LevelFilter,
-    ) -> Self {
-        let module = module.into();
-
-        if let Some((index, _)) = self
-            .levels
-            .iter()
-            .enumerate()
-            .find(|(_, (name, _))| *name == module)
-        {
-            self.levels.remove(index);
-        }
-
-        self.levels.push((module, level));
+    pub fn with_level_for<T: Into<String>>(mut self, target: T, level: log::LevelFilter) -> Self {
+        self.levels.push((target.into(), level));
         self
     }
 
@@ -268,6 +274,14 @@ impl CallLogger {
     }
 
     /// Write the output of the call to a file
+    ///
+    /// Example
+    /// ```
+    /// # use call_logger::CallLogger;
+    /// CallLogger::new()
+    ///     .to_file("my_app.log")
+    ///     .init();
+    /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]
     pub fn to_file<P>(mut self, file: P) -> CallLogger
@@ -287,18 +301,18 @@ impl CallLogger {
     /// Example usage:
     ///
     /// ```
-    ///     let _ = call_logger::CallLogger::new()
-    ///         .format(|timestamp, message, record| {
-    ///             format!(
-    ///                 "{{ \"content\": \"{} [{}] {} - {}\" }}",
-    ///                 timestamp,
-    ///                 record.level(),
-    ///                 record.module_path().unwrap_or_default(),
-    ///                 message
-    ///             )
-    ///         })
-    ///         .init();
-    ///     log::info!("msg");
+    /// let _ = call_logger::CallLogger::new()
+    ///     .format(|timestamp, message, record| {
+    ///         format!(
+    ///             "{{ \"content\": \"{} [{}] {} - {}\" }}",
+    ///             timestamp,
+    ///             record.level(),
+    ///             record.module_path().unwrap_or_default(),
+    ///             message
+    ///         )
+    ///     })
+    ///     .init();
+    /// log::info!("msg");
     /// ```
     #[inline]
     #[cfg(feature = "timestamps")]
@@ -319,17 +333,17 @@ impl CallLogger {
     /// Example usage:
     ///
     /// ```
-    ///     let _ = call_logger::CallLogger::new()
-    ///         .format(|message, record| {
-    ///             format!(
-    ///                 "{{ \"content\": \"[{}] {} - {}\" }}",
-    ///                 record.level(),
-    ///                 record.module_path().unwrap_or_default(),
-    ///                 message
-    ///             )
-    ///         })
-    ///         .init();
-    ///     log::info!("msg");
+    /// let _ = call_logger::CallLogger::new()
+    ///     .format(|message, record| {
+    ///         format!(
+    ///             "{{ \"content\": \"[{}] {} - {}\" }}",
+    ///             record.level(),
+    ///             record.module_path().unwrap_or_default(),
+    ///             message
+    ///         )
+    ///     })
+    ///     .init();
+    /// log::info!("msg");
     /// ```
     #[inline]
     #[cfg(not(feature = "timestamps"))]
@@ -425,6 +439,14 @@ impl CallLogger {
         );
         format!("{{{timestamp}{level}{file}{line}{module_path}{kv_str}{msg}}}")
     }
+
+    fn get_level_for_module(&self, target: String) -> &LevelFilter {
+        self.levels
+            .iter()
+            .find(|(module, _)| target.contains(module))
+            .map(|(_, level)| level)
+            .unwrap_or(&self.level)
+    }
 }
 
 impl Default for CallLogger {
@@ -435,7 +457,7 @@ impl Default for CallLogger {
 
 impl Log for CallLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.level
+        metadata.level() <= *self.get_level_for_module(metadata.target().to_string())
     }
 
     fn log(&self, record: &Record) {
