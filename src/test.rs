@@ -79,6 +79,22 @@ fn test_log_default() {
 }
 
 #[test]
+fn test_log_debug() {
+    let logger = CallLogger::default()
+        .with_level(LevelFilter::Error)
+        .with_level_for("test", LevelFilter::Warn)
+        .to_file("test.log")
+        .echo();
+    let test = format!("{:?}", logger);
+    assert!(test.contains("CallLogger"));
+    assert!(test.contains("call-target: \"echo\","));
+    assert!(test.contains("echo: true,"));
+    assert!(test.contains("level: Error, "));
+    assert!(test.contains("levels: {\"test\": Warn}, "));
+    assert!(test.contains("file: Some(\"test.log\"),"));
+}
+
+#[test]
 #[cfg(feature = "timestamps")]
 fn test_log_format_ts() {
     let filename = "test_log_format_ts.log";

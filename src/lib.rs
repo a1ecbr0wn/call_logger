@@ -64,7 +64,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    fmt::Arguments,
+    fmt::{Arguments, Debug},
     fs::write,
     path::{Path, PathBuf},
     process::Command,
@@ -115,6 +115,7 @@ pub struct CallLogger {
     /// The file to write the output of the call to
     file: Option<PathBuf>,
 
+    /// A closure that defines how the output is displayed
     formatter: Box<Formatter>,
 
     /// Echo everything to console just before making the call, to aid debugging.
@@ -518,6 +519,33 @@ impl Log for CallLogger {
 
     fn flush(&self) {
         log::logger().flush()
+    }
+}
+
+impl Debug for CallLogger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct LevelsDebug<'a>(&'a [(String, LevelFilter)]);
+        impl Debug for LevelsDebug<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.debug_map()
+                    .entries(self.0.iter().map(|t| (&t.0, t.1)))
+                    .finish()
+            }
+        }
+        let mut f = f.debug_struct("CallLogger");
+
+        let f = f
+            .field("call-target", &self.call_target)
+            .field("level", &self.level)
+            .field("levels", &LevelsDebug(&self.levels))
+            .field("echo", &self.echo)
+            .field("file", &self.file)
+            .field("formatter", &"Box<Formatter>");
+
+        #[cfg(feature = "timestamps")]
+        let f = f.field("timestamp", &self.timestamp);
+
+        f.finish()
     }
 }
 
