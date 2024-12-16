@@ -79,6 +79,22 @@ fn test_log_default() {
 }
 
 #[test]
+fn test_log_debug() {
+    let logger = CallLogger::default()
+        .with_level(LevelFilter::Error)
+        .with_level_for("test", LevelFilter::Warn)
+        .to_file("test.log")
+        .echo();
+    let test = format!("{:?}", logger);
+    assert!(test.contains("CallLogger"));
+    assert!(test.contains("call-target: \"echo\","));
+    assert!(test.contains("echo: true,"));
+    assert!(test.contains("level: Error, "));
+    assert!(test.contains("levels: {\"test\": Warn}, "));
+    assert!(test.contains("file: Some(\"test.log\"),"));
+}
+
+#[test]
 #[cfg(feature = "timestamps")]
 fn test_log_format_ts() {
     let filename = "test_log_format_ts.log";
@@ -186,6 +202,72 @@ fn test_log_level_filter() {
 fn test_level() {
     let logger = CallLogger::default().with_level(LevelFilter::Info);
     assert_eq!(logger.level, LevelFilter::Info);
+}
+
+#[test]
+fn test_with_level_for_match() {
+    let logger = CallLogger::default()
+        .with_level(LevelFilter::Info)
+        .with_level_for("test", LevelFilter::Warn);
+    assert_eq!(logger.level, LevelFilter::Info);
+    let trace_metadata = Metadata::builder()
+        .level(Level::Trace)
+        .target("call_logger::test::module")
+        .build();
+    let debug_metadata = Metadata::builder()
+        .level(Level::Debug)
+        .target("call_logger::test::module")
+        .build();
+    let info_metadata = Metadata::builder()
+        .level(Level::Info)
+        .target("call_logger::test::module")
+        .build();
+    let warn_metadata = Metadata::builder()
+        .level(Level::Warn)
+        .target("call_logger::test::module")
+        .build();
+    let error_metadata = Metadata::builder()
+        .level(Level::Error)
+        .target("call_logger::test::module")
+        .build();
+    assert!(!logger.enabled(&trace_metadata));
+    assert!(!logger.enabled(&debug_metadata));
+    assert!(!logger.enabled(&info_metadata));
+    assert!(logger.enabled(&warn_metadata));
+    assert!(logger.enabled(&error_metadata));
+}
+
+#[test]
+fn test_with_level_for_no_match() {
+    let logger = CallLogger::default()
+        .with_level(LevelFilter::Info)
+        .with_level_for("test", LevelFilter::Warn);
+    assert_eq!(logger.level, LevelFilter::Info);
+    let trace_metadata = Metadata::builder()
+        .level(Level::Trace)
+        .target("call_logger::module")
+        .build();
+    let debug_metadata = Metadata::builder()
+        .level(Level::Debug)
+        .target("call_logger::module")
+        .build();
+    let info_metadata = Metadata::builder()
+        .level(Level::Info)
+        .target("call_logger::module")
+        .build();
+    let warn_metadata = Metadata::builder()
+        .level(Level::Warn)
+        .target("call_logger::module")
+        .build();
+    let error_metadata = Metadata::builder()
+        .level(Level::Error)
+        .target("call_logger::module")
+        .build();
+    assert!(!logger.enabled(&trace_metadata));
+    assert!(!logger.enabled(&debug_metadata));
+    assert!(logger.enabled(&info_metadata));
+    assert!(logger.enabled(&warn_metadata));
+    assert!(logger.enabled(&error_metadata));
 }
 
 #[test]
