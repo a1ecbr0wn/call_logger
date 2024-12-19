@@ -1,10 +1,10 @@
 [package]
 name = "call_logger"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Alec Brown <alec@noser.net>"]
 description = "A logger that calls another application for every logged item"
-rust-version = "1.58"
+rust-version = "1.71"
 license = "Apache-2.0"
 repository = "https://github.com/a1ecbr0wn/call_logger"
 homepage = "https://github.com/a1ecbr0wn/call_logger"
@@ -21,7 +21,7 @@ minimal = []
 [dependencies]
 log = { version = "^0.4.22", features = ["std", "kv"] }
 chrono = { version = "^0.4.39", features = ["clock"], optional = true }
-reqwest = { version = "^0.12", features = ["blocking"] }
+ureq = "2.12.1"
 
 [dev-dependencies]
 multi_log = "^0.1.2"
