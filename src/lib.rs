@@ -472,12 +472,12 @@ impl Log for CallLogger {
                 if self.echo {
                     println!("Calling: `{}\n\t{params}`", self.call_target);
                 }
-                reqwest::blocking::Client::new()
-                    .post(&self.call_target)
-                    .header("Content-Type", "application/json")
-                    .body(params)
-                    .send()
-                    .unwrap();
+                if let Err(x) = ureq::post(&self.call_target)
+                    .set("Content-Type", "application/json")
+                    .send_string(params.as_str())
+                {
+                    println!("logging call to {} failed {x}", self.call_target);
+                }
             } else {
                 let mut args = if let Some((header, trailer)) = self.call_target.split_once("{}") {
                     let mut args = header.split(' ').collect::<VecDeque<&str>>();
@@ -503,13 +503,13 @@ impl Log for CallLogger {
                             }
                         }
                         Err(x) => {
-                            println!("call to {} failed {x}", self.call_target);
+                            println!("logging call to {} failed {x}", self.call_target);
                         }
                     },
                     None => match Command::new(call_target).args(args).spawn() {
                         Ok(_) => {}
                         Err(x) => {
-                            println!("call to {} failed {x}", self.call_target);
+                            println!("logging call to {} failed {x}", self.call_target);
                         }
                     },
                 }
