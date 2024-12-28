@@ -202,15 +202,18 @@ impl CallLogger {
     /// # use call_logger::CallLogger;
     /// CallLogger::new()
     ///     .with_call_target("echo -n")
-    ///     .init();    
+    ///     .init();
     /// ```
     ///
     /// Example - Call a URL
     /// ```
     /// # use call_logger::CallLogger;
+    /// # use log::{info, LevelFilter};
     /// CallLogger::new()
+    ///     .with_level(LevelFilter::Debug)
     ///     .with_call_target("https://postman-echo.com/post")
-    ///     .init();    
+    ///     .init();
+    /// # info!("test");
     /// ```
     #[inline]
     #[must_use = "You must call init() before logging"]

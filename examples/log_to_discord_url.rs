@@ -15,7 +15,7 @@ fn main() {
     if let Ok(endpoint) = std::env::var("CALL_LOGGER_DISCORD") {
         let _ = CallLogger::new()
             .with_call_target(endpoint)
-            .with_level(LevelFilter::Info)
+            .with_level(LevelFilter::Debug)
             .format(|timestamp, message, record| {
                 format!(
                     "{{ \"content\": \"{} [{}] {} - {}\" }}",
@@ -25,6 +25,7 @@ fn main() {
                     message
                 )
             })
+            .echo()
             .init();
         log::info!("Hello discord");
     }

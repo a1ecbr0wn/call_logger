@@ -341,28 +341,26 @@ fn test_call_web_target_json() {
     let mock = server
         .mock("POST", "/test")
         .with_status(200)
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"level\": \"ERROR\"}".to_string(),
-        ))
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"module_path\": \"call_logger::test_call_web_target_json\"}".to_string(),
-        ))
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"test_item\": \"test_value\"}".to_string(),
-        ))
-        .with_body("msg")
+        .match_body(
+            mockito::Matcher::AllOf(vec![
+                mockito::Matcher::Regex("\"level\":\"WARN\"".to_string()),
+                mockito::Matcher::Regex("\"module_path\":\"call_logger::test_call_web_target_json".to_string()),
+                mockito::Matcher::Regex("\"test_item\":\"test_value\"".to_string()),
+            ])
+         )
         .create();
     let url = server.url();
     let logger = CallLogger::new()
-        .with_level(LevelFilter::Error)
-        .with_call_target(format!("{url}/test"));
+        .with_level(LevelFilter::Debug)
+        .with_call_target(format!("{url}/test"))
+        .echo();
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))
             .key_values(&TestSource::new("test_item", "test_value"))
             .file(Some("src/lib.rs"))
             .module_path(Some("call_logger::test_call_web_target_json"))
-            .level(Level::Error)
+            .level(Level::Warn)
             .build(),
     );
     mock.assert();
