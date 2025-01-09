@@ -20,14 +20,14 @@
 //!
 //! # Example - Call default application (`echo`) for each log and default info level,
 //! `.new()` defaults to calling `echo` and therefore is analagous to `.with_call_target("echo")`
-//! ```
+//! ```rust
 //! let _ = call_logger::CallLogger::new()
 //!     .with_level(log::LevelFilter::Info).init();
 //! log::info!("msg");
 //! ```
 //!
 //! # Example - Call an application for each log and write the result of the call to a file
-//! ```
+//! ```rust
 //! let _ = call_logger::CallLogger::new()
 //!     .with_call_target("echo")
 //!     .to_file("test.log")
@@ -39,7 +39,7 @@
 //! ```
 //!
 //! # Example - Send all output to Discord via their API
-//! ```
+//! ```rust
 //! // Get the API endpoint from an environment variable, URL should start with `https://discord.com/api/webhooks/`
 //! #[cfg(feature = "timestamps")]
 //! if let Ok(endpoint) = std::env::var("DISCORD_API") {
@@ -82,7 +82,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// of the log output if the `timestamps` feature is enabled for `call_logger`/
 #[cfg(feature = "timestamps")]
 #[derive(PartialEq, Debug)]
-enum TimestampFormat {
+pub enum TimestampFormat {
     UtcEpochMs,
     UtcEpochUs,
     Utc,
@@ -94,7 +94,7 @@ enum TimestampFormat {
 /// logs with a JSON representation of the logged item.  The logger then needs to be initialized (`.init()`) before use.
 ///
 /// # Example - The simple logger that calls `echo`
-/// ```
+/// ```rust
 /// # use call_logger::CallLogger;
 /// CallLogger::new().init();
 /// ```
@@ -112,6 +112,10 @@ pub struct CallLogger {
     #[cfg(feature = "timestamps")]
     timestamp: TimestampFormat,
 
+    /// The format string if using custom timestamps
+    #[cfg(feature = "timestamps")]
+    format_string: Option<String>,
+
     /// The file to write the output of the call to
     file: Option<PathBuf>,
 
@@ -128,7 +132,7 @@ impl CallLogger {
     /// that is called is `echo`.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// CallLogger::new().init();
     /// ```
@@ -142,6 +146,8 @@ impl CallLogger {
 
             #[cfg(feature = "timestamps")]
             timestamp: TimestampFormat::Utc,
+            #[cfg(feature = "timestamps")]
+            format_string: None,
             file: None,
             echo: false,
             formatter: Box::new(Self::json_formatter),
@@ -151,7 +157,7 @@ impl CallLogger {
     /// The maximum log level that would be logged.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// # use log::LevelFilter;
     /// CallLogger::new()
@@ -170,7 +176,7 @@ impl CallLogger {
     /// target or module path.
     ///
     /// # Example matching a module name
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// # use log::{error, LevelFilter};
     /// CallLogger::new()
@@ -180,7 +186,7 @@ impl CallLogger {
     /// ```
     ///
     /// # Example matching a target
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// # use log::{error, LevelFilter};
     /// CallLogger::new()
@@ -198,7 +204,7 @@ impl CallLogger {
     /// Sets the command line application, script or URL that is called and passed the log details.
     ///
     /// Example - Call an application with parameters
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// CallLogger::new()
     ///     .with_call_target("echo -n")
@@ -206,7 +212,7 @@ impl CallLogger {
     /// ```
     ///
     /// Example - Call a URL
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// CallLogger::new()
     ///     .with_call_target("https://postman-echo.com/post")
@@ -258,10 +264,38 @@ impl CallLogger {
         self
     }
 
+    /// Formats the combined date and time as per the specified format string.
+    ///
+    /// See the [`crate::format::strftime`] module for the supported escape sequences.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use std::time::SystemTime;
+    /// # use chrono::DateTime;
+    /// # use call_logger::{CallLogger, TimestampFormat};
+    /// let logger = CallLogger::default()
+    ///     .with_formatted_timestamp(TimestampFormat::Utc,"%H:%M:%S %d/%m/%Y %z");
+    /// ```
+    #[inline]
+    #[must_use = "You must call init() before logging"]
+    #[cfg(feature = "timestamps")]
+    pub fn with_formatted_timestamp<T>(
+        mut self,
+        timestamp_format: TimestampFormat,
+        format_string: T,
+    ) -> CallLogger
+    where
+        T: Into<String>,
+    {
+        self.timestamp = timestamp_format;
+        self.format_string = Some(format_string.into());
+        self
+    }
+
     /// Writes each call to console before making the call, use for debugging.
     ///
     /// Example
-    /// ```
+    /// ```rust
     /// # use call_logger::CallLogger;
     /// CallLogger::new()
     ///     .echo()
@@ -369,24 +403,33 @@ impl CallLogger {
     }
 
     #[cfg(feature = "timestamps")]
-    fn format_timestamp(&self) -> String {
-        match &self.timestamp {
-            TimestampFormat::UtcEpochMs => SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Leap second or time went backwards")
-                .as_millis()
-                .to_string(),
-            TimestampFormat::UtcEpochUs => SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Leap second or time went backwards")
-                .as_micros()
-                .to_string(),
-            TimestampFormat::Utc => Into::<DateTime<Utc>>::into(SystemTime::now())
-                .to_rfc3339()
-                .to_string(),
-            TimestampFormat::Local => Into::<DateTime<Local>>::into(SystemTime::now())
-                .to_rfc3339()
-                .to_string(),
+    fn format_timestamp(&self, time: SystemTime) -> String {
+        if let Some(format_string) = &self.format_string {
+            match &self.timestamp {
+                TimestampFormat::Local => Into::<DateTime<Local>>::into(time)
+                    .format(format_string)
+                    .to_string(),
+                _ => Into::<DateTime<Utc>>::into(time)
+                    .format(format_string)
+                    .to_string(),
+            }
+        } else {
+            match &self.timestamp {
+                TimestampFormat::UtcEpochMs => time
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Leap second or time went backwards")
+                    .as_millis()
+                    .to_string(),
+                TimestampFormat::UtcEpochUs => time
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Leap second or time went backwards")
+                    .as_micros()
+                    .to_string(),
+                TimestampFormat::Utc => Into::<DateTime<Utc>>::into(time).to_rfc3339().to_string(),
+                TimestampFormat::Local => {
+                    Into::<DateTime<Local>>::into(time).to_rfc3339().to_string()
+                }
+            }
         }
     }
 
@@ -465,7 +508,11 @@ impl Log for CallLogger {
         if self.enabled(record.metadata()) {
             let formatter = &self.formatter;
             #[cfg(feature = "timestamps")]
-            let params = formatter(self.format_timestamp(), record.args(), record);
+            let params = formatter(
+                self.format_timestamp(SystemTime::now()),
+                record.args(),
+                record,
+            );
             #[cfg(not(feature = "timestamps"))]
             let params = formatter(record.args(), record);
             if self.call_target.starts_with("http://") || self.call_target.starts_with("https://") {

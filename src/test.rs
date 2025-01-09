@@ -281,6 +281,10 @@ fn test_call_target() {
 fn test_epoch_ms_timestamp() {
     let logger = CallLogger::default().with_epoch_ms_timestamp();
     assert_eq!(logger.timestamp, TimestampFormat::UtcEpochMs);
+    let test_time: SystemTime = DateTime::parse_from_rfc3339("2025-01-03T10:30:00+00:00")
+        .unwrap()
+        .into();
+    assert_eq!(logger.format_timestamp(test_time), "1735900200000");
 }
 
 #[test]
@@ -288,6 +292,10 @@ fn test_epoch_ms_timestamp() {
 fn test_epoch_us_timestamp() {
     let logger = CallLogger::default().with_epoch_us_timestamp();
     assert_eq!(logger.timestamp, TimestampFormat::UtcEpochUs);
+    let test_time: SystemTime = DateTime::parse_from_rfc3339("2025-01-03T10:30:00+00:00")
+        .unwrap()
+        .into();
+    assert_eq!(logger.format_timestamp(test_time), "1735900200000000");
 }
 
 #[test]
@@ -295,6 +303,13 @@ fn test_epoch_us_timestamp() {
 fn test_utc_timestamp() {
     let logger = CallLogger::default().with_utc_timestamp();
     assert_eq!(logger.timestamp, TimestampFormat::Utc);
+    let test_time: SystemTime = DateTime::parse_from_rfc3339("2025-01-03T10:30:00+00:00")
+        .unwrap()
+        .into();
+    assert_eq!(
+        logger.format_timestamp(test_time),
+        "2025-01-03T10:30:00+00:00"
+    );
 }
 
 #[test]
@@ -302,6 +317,21 @@ fn test_utc_timestamp() {
 fn test_local_timestamp() {
     let logger = CallLogger::default().with_local_timestamp();
     assert_eq!(logger.timestamp, TimestampFormat::Local);
+}
+
+#[test]
+#[cfg(feature = "timestamps")]
+fn test_formatted_timestamp() {
+    let logger = CallLogger::default()
+        .with_formatted_timestamp(TimestampFormat::Utc, "%H:%M:%S %d/%m/%Y %z");
+    assert_eq!(logger.timestamp, TimestampFormat::Utc);
+    let test_time: SystemTime = DateTime::parse_from_rfc3339("2025-01-03T10:30:00+00:00")
+        .unwrap()
+        .into();
+    assert_eq!(
+        logger.format_timestamp(test_time),
+        "10:30:00 03/01/2025 +0000"
+    );
 }
 
 #[test]
