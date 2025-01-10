@@ -478,7 +478,7 @@ impl Log for CallLogger {
                 let avoid_overflow = match record.module_path() {
                     Some(module_path) => {
                         module_path.starts_with("ureq::") || module_path.starts_with("rustls::")
-                    },
+                    }
                     None => false,
                 };
                 if !avoid_overflow {
