@@ -342,13 +342,13 @@ fn test_call_web_target_json() {
     let mock = server
         .mock("POST", "/test")
         .with_status(200)
-        .match_body(
-            mockito::Matcher::AllOf(vec![
-                mockito::Matcher::Regex("\"level\":\"WARN\"".to_string()),
-                mockito::Matcher::Regex("\"module_path\":\"call_logger::test_call_web_target_json".to_string()),
-                mockito::Matcher::Regex("\"test_item\":\"test_value\"".to_string()),
-            ])
-         )
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::Regex("\"level\":\"WARN\"".to_string()),
+            mockito::Matcher::Regex(
+                "\"module_path\":\"call_logger::test_call_web_target_json".to_string(),
+            ),
+            mockito::Matcher::Regex("\"test_item\":\"test_value\"".to_string()),
+        ]))
         .create();
     let url = server.url();
     let logger = CallLogger::new()
