@@ -353,8 +353,7 @@ fn test_call_web_target_json() {
     let url = server.url();
     let logger = CallLogger::new()
         .with_level(LevelFilter::Debug)
-        .with_call_target(format!("{url}/test"))
-        .echo();
+        .with_call_target(format!("{url}/test"));
     logger.log(
         &Record::builder()
             .args(format_args!("test message"))

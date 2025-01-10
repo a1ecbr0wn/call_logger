@@ -25,7 +25,6 @@ fn main() {
                     message
                 )
             })
-            .echo()
             .init();
         log::info!("Hello discord");
     }
