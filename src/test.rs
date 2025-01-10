@@ -12,10 +12,11 @@ use std::{
 #[test]
 fn test_log() {
     let filename = "test_log.log";
+    let _just_delete = remove_file(filename);
     let logger = CallLogger::new().with_call_target(format!("scripts/to_file.sh {}", filename));
     logger.log(
         &Record::builder()
-            .args(format_args!("test message"))
+            .args(format_args!("test_log message"))
             .file(Some("src/lib.rs"))
             .module_path(Some("call_logger::test"))
             .level(Level::Error)
@@ -27,7 +28,7 @@ fn test_log() {
             assert!(test.contains("\"level\":\"ERROR\""));
             assert!(test.contains("\"file\":\"src/lib.rs\""));
             assert!(test.contains("\"module_path\":\"call_logger::test\""));
-            assert!(test.contains("\"msg\":\"test message\""));
+            assert!(test.contains("\"msg\":\"test_log message\""));
             remove_file(filename).unwrap();
             thread::sleep(time::Duration::from_millis(10));
             return;
@@ -371,20 +372,17 @@ fn test_call_web_target_json() {
     let mock = server
         .mock("POST", "/test")
         .with_status(200)
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"level\": \"ERROR\"}".to_string(),
-        ))
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"module_path\": \"call_logger::test_call_web_target_json\"}".to_string(),
-        ))
-        .match_body(mockito::Matcher::PartialJsonString(
-            "{\"test_item\": \"test_value\"}".to_string(),
-        ))
-        .with_body("msg")
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::Regex("\"level\":\"WARN\"".to_string()),
+            mockito::Matcher::Regex(
+                "\"module_path\":\"call_logger::test_call_web_target_json".to_string(),
+            ),
+            mockito::Matcher::Regex("\"test_item\":\"test_value\"".to_string()),
+        ]))
         .create();
     let url = server.url();
     let logger = CallLogger::new()
-        .with_level(LevelFilter::Error)
+        .with_level(LevelFilter::Debug)
         .with_call_target(format!("{url}/test"));
     logger.log(
         &Record::builder()
@@ -392,7 +390,7 @@ fn test_call_web_target_json() {
             .key_values(&TestSource::new("test_item", "test_value"))
             .file(Some("src/lib.rs"))
             .module_path(Some("call_logger::test_call_web_target_json"))
-            .level(Level::Error)
+            .level(Level::Warn)
             .build(),
     );
     mock.assert();
