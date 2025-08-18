@@ -19,14 +19,14 @@ timestamps = ["chrono"]
 minimal = []
 
 [dependencies]
-log = { version = "^0.4.22", features = ["std", "kv"] }
-chrono = { version = "^0.4.39", features = ["clock"], optional = true }
-ureq = "3.0.5"
+log = { version = "0.4.27", features = ["std", "kv"] }
+chrono = { version = "0.4.41", features = ["clock"], optional = true }
+ureq = "3.1.0"
 
 [dev-dependencies]
-multi_log = "^0.1.2"
-mockito = "^1.6.1"
-fern = "^0.7"
+multi_log = "0.1.2"
+mockito = "1.7.0"
+fern = "0.7.1"
 
 [[example]]
 name = "log_to_discord_script"
