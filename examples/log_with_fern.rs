@@ -8,7 +8,7 @@ use log::{info, LevelFilter, Log};
 /// cargo run --example log_with_fern
 /// ```
 fn main() {
-    let call_logger: Box<(dyn Log + 'static)> = Box::new(
+    let call_logger: Box<dyn Log + 'static> = Box::new(
         CallLogger::new()
             .format(|_, message, _| message.to_string())
             .with_level(LevelFilter::Info)
