@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  tag-release:
+  release-tag:
     name: Build tag as a release
     runs-on: ubuntu-latest
     strategy:
@@ -29,6 +29,24 @@ jobs:
 
       - name: Build
         run: cargo build --release
+  
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.ref_name }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Upload Release Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.git-cliff.outputs.content }}
+          tag_name: "${{ github.ref_name }}"
+          name: "Release ${{ github.ref_name }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Publish to crates.io
         env:
