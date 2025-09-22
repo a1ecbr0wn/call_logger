@@ -36,11 +36,6 @@ jobs:
   build:
     name: CI Build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable]
-        TARGET:
-          - x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
@@ -49,8 +44,8 @@ jobs:
       - name: Toolchain setup
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.TARGET }}
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
 
       - name: Build
         run: cargo build
@@ -70,11 +65,6 @@ jobs:
   test:
     name: CI Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable]
-        TARGET:
-          - x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
@@ -83,11 +73,23 @@ jobs:
       - name: Toolchain setup
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.TARGET }}
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
 
       - name: Test Features
         run: cargo test --all-features
 
       - name: Test Without Features
         run: cargo test --no-default-features
+
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.event.inputs.version }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+      
+      - run: cat CHANGELOG.md
