@@ -93,3 +93,11 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
       
       - run: cat CHANGELOG.md
+
+      - name: Upload Release Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG.md
+          tag_name: "v0.6.3-test1"
+          name: "Release v0.6.3-test1"
+          token: "${{ secrets.GITHUB_TOKEN }}"
