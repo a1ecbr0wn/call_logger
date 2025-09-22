@@ -2,15 +2,22 @@
 name: Release Binaries on Tag
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs: 
+
+      version:
+        description: 'Tag to apply, in the form "v0.0.0"'
+        required: true
 
 jobs:
   release-tag:
     name: Build tag as a release
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable]
+        TARGET:
+          - x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
@@ -23,42 +30,24 @@ jobs:
           target: x86_64-unknown-linux-gnu
 
       - name: Build
-        run: cargo build --release
+        run: cargo build
   
       - name: Generate a changelog
         uses: orhun/git-cliff-action@v4
         id: git-cliff
         with:
           config: cliff.toml
-          args: --tag ${{ github.ref_name }}
+          args: --tag ${{ github.event.inputs.version }}
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
+      
+      - run: cat CHANGELOG.md
 
       - name: Upload Release Artifacts
         uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
-          tag_name: "${{ github.ref_name }}"
-          name: "Release ${{ github.ref_name }}"
+          tag_name: "${{ github.event.inputs.version }}"
+          name: "Release ${{ github.event.inputs.version}}"
           token: "${{ secrets.GITHUB_TOKEN }}"
-
-  publish-to-crates:
-    name: Publish tag to crates.io
-    needs: release-tag
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Toolchain setup
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          target: x86_64-unknown-linux-gnu
-
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: "${{ secrets.CRATES_TOKEN }}"
-        run: cargo publish
