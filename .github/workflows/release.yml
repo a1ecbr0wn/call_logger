@@ -43,6 +43,8 @@ jobs:
           tag_name: "${{ github.ref_name }}"
           name: "Release ${{ github.ref_name }}"
           token: "${{ secrets.GITHUB_TOKEN }}"
+          files: |
+            LICENSE
 
   publish-to-crates:
     name: Publish tag to crates.io
