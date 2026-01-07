@@ -1,6 +1,6 @@
 [package]
 name = "call_logger"
-version = "v1.0.1"
+version = "1.0.1"
 edition = "2021"
 authors = ["Alec Brown <alec@noser.net>"]
 description = "A logger that calls another application for every logged item"
